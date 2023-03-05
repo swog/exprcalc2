@@ -21,15 +21,18 @@ static constexpr bool IsOperator(char ch) {
 	return ch == '^' || ch == '*' || ch == '/' || ch == '+' || ch == '-' || ch == '(' || ch == ')' || ch == '%';
 }
 
-static constexpr size_t TokenType(char ch);
+enum class TokenType : unsigned char {
+	Empty,
+	Literal = 1,
+	Symbol,
+};
+
+static constexpr enum class TokenType TokenType(char ch) {
+	return IsOperator(ch) ? TokenType::Symbol : TokenType::Literal;
+}
 
 class Token {
 public:
-	enum : size_t {
-		Literal = 1,
-		Symbol,
-	};
-
 	Token() {
 	}
 
@@ -41,26 +44,32 @@ public:
 		return _Str.front();
 	}
 
-	// 0 - Unknown, 1 - Operator, 2 - Literal
-	inline size_t Type() const {
-		return _Str.length() == 0 ? 0 : TokenType(Front());
+	inline enum class TokenType Type() const {
+		return _Str.length() == 0 ? TokenType::Empty : TokenType(Front());
 	}
 
 	std::string_view _Str;
 };
 
-static constexpr size_t TokenType(char ch) {
-	return IsOperator(ch) ? Token::Symbol : Token::Literal;
-}
-
-class SyntaxTree {
+//https://stackoverflow.com/questions/423898/postfix-notation-to-expression-tree
+class SyntaxTree : public Token {
 public:
+	SyntaxTree(const class Token& Token, SyntaxTree *Left, SyntaxTree *Right) {
+		_Str = Token._Str;
+		_Left = Left;
+		_Right = Right;
+	}
+
+	SyntaxTree *_Left, *_Right;
 };
 
 class Lexer {
 public:
+	~Lexer() {
+	}
+
 	Lexer(const char *Input, size_t Size)
-		: _Input(Input), _Index(0), _Size(Size), _Tokens(NULL) {
+		: _Input(Input), _Index(0), _Size(Size) {
 		if (!_Size)
 			return;
 		std::stack<Token> stack;
@@ -68,8 +77,18 @@ public:
 		Token token;
 		do {
 			token = Read();
-			if (token.Type() == Token::Symbol) {
-				if (token.Front() == ')') {
+			if (token.Type() == TokenType::Literal) {
+				postfix.push_back(token);
+			}
+			else if (token.Type() == TokenType::Symbol) {
+				if (token.Front() != ')') {
+					while (token.Front() != '(' && stack.size() && GetPrescedence(stack.top().Front()) >= GetPrescedence(token.Front())) {
+						postfix.push_back(stack.top());
+						stack.pop();
+					}
+					stack.push(token);
+				}
+				else {
 					while (stack.size() && stack.top().Front() != '(') {
 						postfix.push_back(stack.top());
 						stack.pop();
@@ -79,16 +98,6 @@ public:
 					}
 					stack.pop();
 				}
-				else {
-					while (token.Front() != '(' && stack.size() && GetPrescedence(stack.top().Front()) >= GetPrescedence(token.Front())) {
-						postfix.push_back(stack.top());
-						stack.pop();
-					}
-					stack.push(token);
-				}
-			}
-			else if (token.Type() == Token::Literal) {
-				postfix.push_back(token);
 			}
 		} while (Advance());
 
@@ -97,14 +106,22 @@ public:
 			stack.pop();
 		}
 
-		for (const auto& tok : postfix)
-			std::cout << tok._Str << '\n';
+		std::stack<SyntaxTree> tree;
+
+		for (const auto& Tok : postfix) {
+			if (Tok.Type() == TokenType::Symbol) {
+				Token Left = tree.top()._Str;
+				tree.pop();
+				Token Right = tree.top()._Str;
+				tree.pop();
+				tree.push(SyntaxTree(Tok, Left, Right));
+			}
+		}
 	}
 
 	const char *_Input;
 	size_t _Index;
 	size_t _Size;
-	Token *_Tokens;
 
 private:
 	bool Advance() {
@@ -114,15 +131,15 @@ private:
 	}
 
 	Token Read() {
-		size_t type = TokenType(_Input[_Index]);
+		auto type = TokenType(_Input[_Index]);
 		Token token;
-		if (type == Token::Literal) {
+		if (type == TokenType::Literal) {
 			size_t i;
 			for (i = _Index; i < _Size && type == TokenType(_Input[i]); i++);
 			token = Token(std::string_view(_Input + _Index, i - _Index));
 			_Index = i;
 		}
-		else if (type == Token::Symbol) {
+		else if (type == TokenType::Symbol) {
 			token = Token(std::string_view(_Input + _Index++, 1));
 		}
 		return token;
@@ -130,7 +147,6 @@ private:
 };
 
 int main() {
-	const char str[] = "7*f(x,y,z)";
+	const char str[] = "(A+B)/(C-D)";
 	Lexer lex(str, sizeof(str));
-
 }
