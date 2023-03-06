@@ -45,7 +45,7 @@ public:
 	}
 
 	inline enum class TokenType Type() const {
-		return _Str.length() == 0 ? TokenType::Empty : TokenType(Front());
+		return _Str.front() == '\0' ? TokenType::Empty : TokenType(Front());
 	}
 
 	std::string_view _Str;
@@ -54,47 +54,84 @@ public:
 //https://stackoverflow.com/questions/423898/postfix-notation-to-expression-tree
 class SyntaxTree : public Token {
 public:
-	SyntaxTree(const class Token& Token, SyntaxTree *Left, SyntaxTree *Right) {
+	~SyntaxTree() {
+		_Left.reset();
+		_Right.reset();
+	}
+	
+	SyntaxTree(const class Token& Token, std::shared_ptr<SyntaxTree> Left, std::shared_ptr<SyntaxTree> Right) {
 		_Str = Token._Str;
 		_Left = Left;
 		_Right = Right;
 	}
 
-	SyntaxTree *_Left, *_Right;
+	void Print(size_t Depth = 0) {
+		for (size_t i = 0; i < Depth; i++)
+			std::cout << '\t';
+		std::cout << _Str << '\n';
+		if (_Left)
+			_Left->Print(++Depth);
+		if (_Right)
+			_Right->Print(Depth);
+	}
+
+	double Eval() {
+		if (Type() == TokenType::Symbol && _Left && _Right) {
+			switch (_Str.front()) {
+			case '^':
+				return pow(_Left->Eval(), _Right->Eval());
+			case '*':
+				return _Left->Eval() * _Right->Eval();
+			case '/':
+				return _Left->Eval() / _Right->Eval();
+			case '+':
+				return _Left->Eval() + _Right->Eval();
+			case '-':
+				return _Left->Eval() - _Right->Eval();
+			}
+		}
+		else
+			return atof(_Str.data());
+	}
+
+	std::shared_ptr<SyntaxTree> _Left, _Right;
 };
 
 class Lexer {
 public:
-	~Lexer() {
+	Lexer() : _Input(NULL), _Index(0), _Size(0) {
 	}
 
-	Lexer(const char *Input, size_t Size)
-		: _Input(Input), _Index(0), _Size(Size) {
+	size_t InfixToPostfix(const char *Input, size_t Size, std::vector<Token>& Postfix) {
+		_Input = Input;
+		_Size = Size;
+		_Index = 0;
+
 		if (!_Size)
-			return;
+			return 1;
+
 		std::stack<Token> stack;
-		std::vector<Token> postfix;
 		Token token;
 		do {
 			token = Read();
 			if (token.Type() == TokenType::Literal) {
-				postfix.push_back(token);
+				Postfix.push_back(token);
 			}
 			else if (token.Type() == TokenType::Symbol) {
 				if (token.Front() != ')') {
 					while (token.Front() != '(' && stack.size() && GetPrescedence(stack.top().Front()) >= GetPrescedence(token.Front())) {
-						postfix.push_back(stack.top());
+						Postfix.push_back(stack.top());
 						stack.pop();
 					}
 					stack.push(token);
 				}
 				else {
 					while (stack.size() && stack.top().Front() != '(') {
-						postfix.push_back(stack.top());
+						Postfix.push_back(stack.top());
 						stack.pop();
 					}
 					if (!stack.size() || stack.top().Front() != '(') {
-						return; // ERROR expected ')'
+						return 2;
 					}
 					stack.pop();
 				}
@@ -102,21 +139,35 @@ public:
 		} while (Advance());
 
 		while (stack.size()) {
-			postfix.push_back(stack.top());
+			Postfix.push_back(stack.top());
 			stack.pop();
 		}
 
-		std::stack<SyntaxTree> tree;
+		return 0;
+	}
 
-		for (const auto& Tok : postfix) {
+	// Must be a shared ptr because the stack holds a list of shared ptrs.
+	//	The tree holds a list of shared ptrs because to make child pairs, we need to first access the top 
+	// (creating a copy from reference), which cannot be done by unique ptrs
+	std::shared_ptr<SyntaxTree> PostfixToSyntaxTree(const std::vector<Token>& Postfix) {
+		std::stack<std::shared_ptr<SyntaxTree>> tree;
+
+		for (const auto& Tok : Postfix) {
 			if (Tok.Type() == TokenType::Symbol) {
-				Token Left = tree.top()._Str;
+				std::shared_ptr<SyntaxTree> Right = tree.top();
 				tree.pop();
-				Token Right = tree.top()._Str;
+				std::shared_ptr<SyntaxTree> Left = tree.top();
 				tree.pop();
-				tree.push(SyntaxTree(Tok, Left, Right));
+				tree.push(std::make_shared<SyntaxTree>(Tok, Left, Right));
 			}
+			else if (Tok.Type() == TokenType::Literal)
+				tree.push(std::make_shared<SyntaxTree>(Tok, nullptr, nullptr));
 		}
+
+		std::shared_ptr<SyntaxTree> Head = tree.top();
+		tree.pop();
+
+		return Head;
 	}
 
 	const char *_Input;
@@ -147,6 +198,11 @@ private:
 };
 
 int main() {
-	const char str[] = "(A+B)/(C-D)";
-	Lexer lex(str, sizeof(str));
+	const char str[] = "(3+4)*((5^6)/7)";
+	Lexer lexer;
+	std::vector<Token> postfix;
+	lexer.InfixToPostfix(str, sizeof(str), postfix);
+	auto tree = lexer.PostfixToSyntaxTree(postfix);
+	tree->Print();
+	std::cout << tree->Eval() << std::endl;
 }
