@@ -7,3 +7,7 @@
 #include <stack>
 #include <cassert>
 #include <string_view>
+#include <charconv>
+#include <unordered_map>
+#define _USE_MATH_DEFINES
+#include <math.h>
