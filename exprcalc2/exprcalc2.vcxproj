@@ -131,15 +131,18 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="exprcalc2.cpp" />
+    <ClCompile Include="lexer.cpp" />
     <ClCompile Include="stdafx.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="tokens.cpp" />
+    <ClCompile Include="syntaxtree.cpp" />
+    <ClCompile Include="token.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="syntaxtree.h" />
+    <ClInclude Include="lexer.h" />
     <ClInclude Include="stdafx.h" />
-    <ClInclude Include="tokens.h" />
+    <ClInclude Include="syntaxtree.h" />
+    <ClInclude Include="token.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
