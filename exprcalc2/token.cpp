@@ -80,6 +80,7 @@ size_t EvalExprList(class Lexer& Lexer, const std::vector<std::string_view>& Exp
 	// Save indices
 	const char* str; size_t size, index; LexerFlags flags;
 	Lexer.Save(&str, &size, &index, &flags);
+	Lexer.SetFlags(LexerFlags::Normal);
 
 	for (size_t i = Start; i < Expr.size(); i++) {
 		Lexer.SetString(Expr[i].data(), Expr[i].size());

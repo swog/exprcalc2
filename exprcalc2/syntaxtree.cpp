@@ -28,22 +28,12 @@ TokenValue SyntaxTree::Eval() const {
 		// Eval first so that the types are correct after function calls etc
 		TokenValue Left = _Left->Eval(), Right = _Right->Eval();
 		// Literal Literal
-		if (TokenTypeIsLiteral(Left._Type) && TokenTypeIsLiteral(Right._Type)) {
-			switch (_Token.Front()) {
-			case '^': return EvalLiteralExp(Left, Right);
-			case '*': return Left.GetNumber() * Right.GetNumber();
-			case '/': return EvalLiteralDiv(Left, Right);
-			case '+': return Left.GetNumber() + Right.GetNumber();
-			case '-': return Left.GetNumber() - Right.GetNumber();
-			}
-		}
-		// Vector Literal
-		else if (Left._Type == TokenType::Vector && TokenTypeIsLiteral(Right._Type)) {
-
-		}
-		// Literal Vector
-		else if (TokenTypeIsLiteral(Left._Type) && Right._Type == TokenType::Vector) {
-
+		switch (_Token.Front()) {
+		case '^': return Left ^ Right;
+		case '*': return Left * Right;
+		case '/': return Left / Right;
+		case '+': return Left + Right;
+		case '-': return Left - Right;
 		}
 		return 0.0;
 	}

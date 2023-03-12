@@ -221,16 +221,25 @@ size_t Lexer::ReadExpressionList(std::vector<std::string_view>& Arguments,
 
 	static const char* _EmptyString = "";
 
+	size_t d = 1;
+
 	size_t i;
 	for (i = _Index; i < _Size && _Input[i]; i++) {
 		// Increment i so that _Index is after `)`
 		if (_Input[i] == EndToken) {
-			i++;
-			break;
+			d--;
+
+			if (!d) {
+				i++;
+				break;
+			}
+		}
+		else if (_Input[i] == BeginToken) {
+			d++;
 		}
 
 		// Add a new argument after a comma or before adding chars
-		if (_Input[i] == DelimiterToken) {
+		if (_Input[i] == DelimiterToken && d == 1) {
 			Arguments.push_back(_EmptyString);
 			continue;
 		}

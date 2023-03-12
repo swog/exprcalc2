@@ -7,6 +7,19 @@ enum class LexerFlags : unsigned char {
 	Verbose = 4,
 };
 
+inline enum class LexerFlags operator|(LexerFlags Left, LexerFlags Right) {
+	return (LexerFlags)((unsigned char)Left | (unsigned char)Right);
+}
+
+inline enum class LexerFlags operator&(LexerFlags Left, LexerFlags Right) {
+	return (LexerFlags)((unsigned char)Left & (unsigned char)Right);
+}
+
+inline enum class LexerFlags& operator|=(LexerFlags& Left, LexerFlags Right) {
+	Left = Left | Right;
+	return Left;
+}
+
 class Lexer {
 public:
 	friend class SyntaxTree;
@@ -86,12 +99,12 @@ public:
 
 	LexerFlags AddFlags(LexerFlags Flags) {
 		auto flags = _Flags;
-		_Flags = (LexerFlags)((unsigned char)_Flags | (unsigned char)Flags);
+		_Flags |= Flags;
 		return flags;
 	}
 
 	bool IsFlagSet(LexerFlags Flags) const {
-		return ((unsigned char)_Flags & (unsigned char)Flags) != 0;
+		return (unsigned char)(_Flags & Flags) != 0;
 	}
 
 private:

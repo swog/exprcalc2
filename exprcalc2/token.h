@@ -10,6 +10,7 @@ enum class TokenType : unsigned char {
 };
 
 inline constexpr enum class TokenType TokenType(char ch);
+inline constexpr bool TokenTypeIsLiteral(const enum class TokenType type);
 
 // The value of a token must be disconnected.
 //	After beginning the SyntaxTree resolution, the connection between tokens
@@ -22,6 +23,10 @@ public:
 
 	TokenValue()
 		: _Type(TokenType::Empty), _Neg(false), _Num(0.0) {
+	}
+
+	TokenValue(enum class TokenType Type) 
+		: _Type(Type), _Neg(false), _Num(0.0) {
 	}
 
 	TokenValue(double Num)
@@ -57,6 +62,85 @@ public:
 			return std::to_string(GetNumber());
 		}
 		return "";
+	}
+
+	typedef TokenValue (*TokenOp)(const TokenValue& Left, const TokenValue& Right);
+
+	static TokenValue PerformLitMul(const TokenValue& Left, const TokenValue& Right) {
+		return Left.GetNumber() * Right.GetNumber();
+	}
+
+	static TokenValue PerformLitDiv(const TokenValue& Left, const TokenValue& Right) {
+		auto right = Right.GetNumber();
+		if (round(right) == 0.0) {
+			std::cerr << "Warning: Literal-literal divide by zero\n";
+			return 0.0;
+		}
+		return Left.GetNumber() / right;
+	}
+
+	static TokenValue PerformLitAdd(const TokenValue& Left, const TokenValue& Right) {
+		return Left.GetNumber() + Right.GetNumber();
+	}
+
+	static TokenValue PerformLitSubtract(const TokenValue& Left, const TokenValue& Right) {
+		return Left.GetNumber() - Right.GetNumber();
+	}
+
+	static TokenValue PerformLitExp(const TokenValue& Left, const TokenValue& Right) {
+		auto left = Left.GetNumber();
+		if (round(left) == 0.0) {
+			std::cerr << "Warning: Literal-literal zero base exponential\n";
+			return 0.0;
+		}
+		return pow(left, Right.GetNumber());
+	}
+
+	// Performs a TokenOp per vector value
+	static TokenValue PerformVecLit(const TokenValue& Left, const TokenValue& Right, TokenOp Op) {
+		TokenValue ret(TokenType::Vector);
+		for (size_t i = 0; i < Left._Vec.size(); i++) {
+			ret._Vec.push_back(Op(Left._Vec[i], Right));
+		}
+		return ret;
+	}
+
+	static TokenValue PerformLitVec(const TokenValue& Left, const TokenValue& Right, TokenOp Op) {
+		TokenValue ret(TokenType::Vector);
+		for (size_t i = 0; i < Right._Vec.size(); i++) {
+			ret._Vec.push_back(Op(Left, Right._Vec[i]));
+		}
+		return ret;
+	}
+
+	TokenValue PerformOp(const TokenValue& Right, TokenOp LitLit) const {
+		if (TokenTypeIsLiteral(_Type) && TokenTypeIsLiteral(Right._Type))
+			return LitLit(*this, Right);
+		else if (TokenTypeIsLiteral(_Type) && Right._Type == TokenType::Vector)
+			return PerformLitVec(*this, Right, LitLit);
+		else if (_Type == TokenType::Vector && TokenTypeIsLiteral(Right._Type))
+			return PerformVecLit(*this, Right, LitLit);
+		return 0.0;
+	}
+	
+	TokenValue operator*(const TokenValue& Right) const {
+		return PerformOp(Right, PerformLitMul);
+	}
+
+	TokenValue operator/(const TokenValue& Right) const {
+		return PerformOp(Right, PerformLitDiv);
+	}
+
+	TokenValue operator+(const TokenValue& Right) const {
+		return PerformOp(Right, PerformLitAdd);
+	}
+
+	TokenValue operator-(const TokenValue& Right) const {
+		return PerformOp(Right, PerformLitSubtract);
+	}
+
+	TokenValue operator^(const TokenValue& Right) const {
+		return PerformOp(Right, PerformLitExp);
 	}
 
 	enum class TokenType			_Type;
@@ -111,7 +195,7 @@ inline constexpr enum class TokenType TokenType(char ch) {
 		return TokenType::Empty;
 }
 
-inline constexpr bool TokenTypeIsLiteral(enum class TokenType type) {
+inline constexpr bool TokenTypeIsLiteral(const enum class TokenType type) {
 	return type == TokenType::Number || type == TokenType::Word;
 }
 
