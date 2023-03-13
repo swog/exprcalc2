@@ -25,7 +25,7 @@ std::unordered_map<std::string, SyntaxCFunc> SyntaxTree::_CFuncs {
 };
 
 int main() {
-	const char str[] = "<2,2^<1,2>,4>";
+	const char str[] = "<2,2^<1,<2,1>>,4>";
 	Lexer lexer(LexerFlags::Verbose);
 	std::vector<Token> postfix;
 	lexer.SetString(str, sizeof(str));
