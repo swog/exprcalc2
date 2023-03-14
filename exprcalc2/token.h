@@ -100,7 +100,7 @@ public:
 	static TokenValue PerformVecLit(const TokenValue& Left, const TokenValue& Right, TokenOp Op) {
 		TokenValue ret(TokenType::Vector);
 		for (size_t i = 0; i < Left._Vec.size(); i++) {
-			ret._Vec.push_back(Op(Left._Vec[i], Right));
+			ret._Vec.push_back(Left._Vec[i].PerformOp(Right, Op));
 		}
 		return ret;
 	}
@@ -108,7 +108,7 @@ public:
 	static TokenValue PerformLitVec(const TokenValue& Left, const TokenValue& Right, TokenOp Op) {
 		TokenValue ret(TokenType::Vector);
 		for (size_t i = 0; i < Right._Vec.size(); i++) {
-			ret._Vec.push_back(Op(Left, Right._Vec[i]));
+			ret._Vec.push_back(Left.PerformOp(Right._Vec[i], Op));
 		}
 		return ret;
 	}

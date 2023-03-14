@@ -75,7 +75,7 @@ TokenValue::TokenValue(class Lexer& Lexer, const Token& Token, enum class TokenT
 size_t EvalExprList(class Lexer& Lexer, const std::vector<std::string_view>& Expr, 
 	size_t Start, std::vector<TokenValue>& Values) {
 	size_t err = 0;
-	static std::vector<Token> postfix;
+	std::vector<Token> postfix;
 	
 	// Save indices
 	const char* str; size_t size, index; LexerFlags flags;

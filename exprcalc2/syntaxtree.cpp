@@ -59,7 +59,7 @@ TokenValue SyntaxTree::GetValue() const {
 	auto it = _Globals.find(varName);
 
 	if (it == _Globals.end()) {
-		std::cerr << "Warning: Unknown variable " << varName << '\n';
+		//std::cerr << "Warning: Unknown variable " << varName << '\n';
 		return 0.0;
 	}
 
