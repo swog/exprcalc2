@@ -5,27 +5,41 @@ enum class LexerFlags : unsigned char {
 	NoFunctionCalls,
 	NoVectors,
 	Verbose = 4,
+	PrintNestedTrees,
 };
 
-inline enum class LexerFlags operator|(LexerFlags Left, LexerFlags Right) {
+inline constexpr enum class LexerFlags operator|(LexerFlags Left, LexerFlags Right) {
 	return (LexerFlags)((unsigned char)Left | (unsigned char)Right);
 }
 
-inline enum class LexerFlags operator&(LexerFlags Left, LexerFlags Right) {
+inline constexpr enum class LexerFlags operator&(LexerFlags Left, LexerFlags Right) {
 	return (LexerFlags)((unsigned char)Left & (unsigned char)Right);
 }
 
-inline enum class LexerFlags& operator|=(LexerFlags& Left, LexerFlags Right) {
+inline constexpr enum class LexerFlags& operator|=(LexerFlags& Left, LexerFlags Right) {
 	Left = Left | Right;
 	return Left;
 }
+
+inline constexpr bool IsLexerFlagSet(LexerFlags Flags, LexerFlags Flag) {
+	return (Flags & Flag) == Flag;
+}
+
+struct LexerState {
+	const char* _Input;
+	size_t		_Index;
+	size_t		_Size;
+	LexerFlags	_Flags;
+	Token		_Prev;
+	bool		_Neg;
+};
 
 class Lexer {
 public:
 	friend class SyntaxTree;
 
 	Lexer(LexerFlags Flags = LexerFlags::Normal) 
-		: _Input(NULL), _Index(0), _Size(0), _Flags(Flags) {
+		: _Input(NULL), _Index(0), _Size(0), _Flags(Flags), _Neg(false) {
 	}
 	
 	size_t InfixToPostfix(std::vector<class Token>& Postfix);
@@ -33,7 +47,11 @@ public:
 	// Must be a shared ptr because the stack holds a list of shared ptrs.
 	//	The tree holds a list of shared ptrs because to make child pairs, we need to first access the top 
 	// (creating a copy from reference), which cannot be done by unique ptrs
-	static std::shared_ptr<class SyntaxTree> PostfixToSyntaxTree(const std::vector<Token>& Postfix);
+	std::shared_ptr<class SyntaxTree> 
+	PostfixToSyntaxTree(
+		const std::vector<Token>& Postfix, 
+		bool Verbose = false
+	);
 
 	bool Advance() {
 		// March until we encounter a non-blank character
@@ -53,38 +71,51 @@ public:
 
 	void Reset() {
 		_Index = 0;
+		_Neg = false;
+		_Prev.Type() = TokenType::Empty;
 	}
 
-	void SetString(const char* Str, 
-		size_t Size,
-		const char** pStr = NULL,
-		size_t* pSize = NULL,
-		size_t* pIndex = NULL) {
-		Save(pStr, pSize, pIndex);
+	void SetString(
+		const char* Str,
+		size_t		Size
+	) {
+		_Input = Str;
+		_Index = 0;
+		_Neg = false;
+		_Size = Size;
+		_Prev.Type() = TokenType::Empty;
+	}
+
+	void SetString(
+		const char*		Str, 
+		size_t			Size,
+		LexerState&		State
+	) {
+		Save(State);
+
 		_Input = Str;
 		_Index = 0;
 		_Size = Size;
+		_Neg = false;
+		_Prev.Type() = TokenType::Empty;
 	}
 
-	void Restore(const char* Str,
-		size_t Size,
-		size_t Index,
-		LexerFlags Flags) {
-		_Input = Str;
-		_Size = Size;
-		_Index = Index;
-		_Flags = Flags;
+	void Restore(const LexerState& State) {
+		_Input = State._Input;
+		_Size = State._Size;
+		_Index = State._Index;
+		_Flags = State._Flags;
+		_Prev = State._Prev;
+		_Neg = State._Neg;
 	}
 
-	void Save(const char** pStr, size_t* pSize, size_t* pIndex, LexerFlags* pFlags = NULL) {
-		if (pStr)
-			*pStr = _Input;
-		if (pSize)
-			*pSize = _Size;
-		if (pIndex)
-			*pIndex = _Index;
-		if (pFlags)
-			*pFlags = _Flags;
+	void Save(LexerState& State) const {
+		State._Input = _Input;
+		State._Size = _Size;
+		State._Index = _Index;
+		State._Prev = _Prev;
+		State._Flags = _Flags;
+		State._Neg = _Neg;
 	}
 
 	void SetIndex(size_t Index) {
@@ -113,6 +144,7 @@ private:
 	size_t		_Size;
 	LexerFlags	_Flags;
 	Token		_Prev;
+	bool		_Neg;
 
 	// Count the call token length following a function name
 	bool ExpressionLength(size_t& i, char BeginToken, char EndToken);

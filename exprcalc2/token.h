@@ -22,23 +22,33 @@ public:
 	TokenValue(class Lexer& Lexer, const class Token& Token, enum class TokenType Type);
 
 	TokenValue()
-		: _Type(TokenType::Empty), _Neg(false), _Num(0.0) {
+		: _Type(TokenType::Empty), _Num(0.0), _Neg(false) {
+	}
+
+	TokenValue(const TokenValue& Other)
+		: _Type(Other._Type), _Num(Other._Num), _Vec(Other._Vec), 
+		_Call(Other._Call), _Neg(Other._Neg) {
 	}
 
 	TokenValue(enum class TokenType Type) 
-		: _Type(Type), _Neg(false), _Num(0.0) {
+		: _Type(Type), _Num(0.0), _Neg(false) {
 	}
 
 	TokenValue(double Num)
-		: _Type(TokenType::Number), _Neg(false), _Num(Num) {
+		: _Type(TokenType::Number), _Num(Num), _Neg(false) {
+	}
+
+	TokenValue(const TokenValue& Other, bool Neg)
+		: _Type(Other._Type), _Num(Other._Num), _Vec(Other._Vec),
+		_Call(Other._Call), _Neg(Neg) {
 	}
 
 	TokenValue(const std::vector<std::string_view>& Call)
-		: _Type(TokenType::FunctionCall), _Neg(false), _Num(0.0), _Call(Call) {
+		: _Type(TokenType::FunctionCall), _Num(0.0), _Call(Call), _Neg(false) {
 	}
 
 	TokenValue(const std::vector<TokenValue>& Vec)
-		: _Type(TokenType::Vector), _Neg(false), _Num(0.0), _Vec(Vec) {
+		: _Type(TokenType::Vector), _Num(0.0), _Vec(Vec), _Neg(false) {
 	}
 
 	inline constexpr double GetNumber() const {
@@ -144,8 +154,8 @@ public:
 	}
 
 	enum class TokenType			_Type;
-	bool							_Neg;
 	double							_Num;
+	bool							_Neg;
 	std::vector<TokenValue>			_Vec;
 	std::vector<std::string_view>	_Call;
 };
@@ -158,6 +168,10 @@ public:
 	}
 
 	static char GetPrescedence(char ch);
+	
+	bool Prescedes(const Token& Other) const {
+		return GetPrescedence(Front()) >= GetPrescedence(Other.Front());
+	}
 
 	Token() {
 	}
@@ -170,12 +184,20 @@ public:
 		: _Value(Num) {
 	}
 
-	inline char Front() const {
+	char Front() const {
 		return _Str.length() ? _Str.front() : 0;
 	}
 
-	inline enum class TokenType Type() const {
+	enum class TokenType Type() const {
 		return _Value._Type;
+	}
+
+	enum class TokenType& Type() {
+		return _Value._Type;
+	}
+
+	bool Negative() const {
+		return _Value._Neg;
 	}
 
 	void Print() const;
@@ -199,5 +221,14 @@ inline constexpr bool TokenTypeIsLiteral(const enum class TokenType type) {
 	return type == TokenType::Number || type == TokenType::Word;
 }
 
+// Expression lists are something like <1,2*2,3> or f(1,2*2,3)
+// - Converts those into lists of TokenValues
 // Some expression lists (Function calls) contain the name of the function as the first string
-size_t EvalExprList(class Lexer& Lexer, const std::vector<std::string_view>& Expr, size_t Start, std::vector<TokenValue>& Values);
+// IOW, The string_view expression list of a function call will have the function name
+size_t EvalExprList(
+	class Lexer&							Lexer,
+	const std::vector<std::string_view>&	Expr,
+	size_t									Start,
+	bool									Neg,
+	std::vector<TokenValue>&				Values
+);

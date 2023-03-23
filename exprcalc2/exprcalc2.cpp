@@ -47,14 +47,26 @@ std::unordered_map<std::string, SyntaxCFunc> SyntaxTree::_CFuncs {
 	{"log", SyntaxFuncs::log},
 };
 
-int main() {
-	const char str[] = "";
-	Lexer lexer(LexerFlags::Verbose);
-	std::vector<Token> postfix;
-	lexer.SetString(str, sizeof(str));
+template<size_t _Size>
+static TokenValue Eval(const char (&Input)[_Size]) {
+	static Lexer lexer;
+	static std::vector<Token> postfix;
+	lexer.SetString(Input, _Size);
 	lexer.InfixToPostfix(postfix);
 	auto tree = lexer.PostfixToSyntaxTree(postfix);
 	if (tree) {
-		std::cout << tree->Eval().ToString() << std::endl;
+		return tree->Eval();
 	}
+	std::cerr << "Error: Empty tree\n";
+	return 0.0;
+}
+
+std::ostream& operator<<(std::ostream& Stream, const TokenValue& Value) {
+	Stream << Value.ToString();
+	return Stream;
+}
+
+int main() {
+	const char str[] = "-cos(pi)*2*-<1,2,,3>";
+	std::cout << Eval(str) << std::endl;
 } 

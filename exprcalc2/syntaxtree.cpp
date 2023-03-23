@@ -5,6 +5,7 @@
 
 static TokenValue EvalLiteralExp(TokenValue& Left, TokenValue& Right) {
 	double left = Left.GetNumber();
+	
 	if (round(left) == 0.0) {
 		std::cerr << "Warning: Exponential base zero\n";
 		return 0.0;
@@ -15,6 +16,7 @@ static TokenValue EvalLiteralExp(TokenValue& Left, TokenValue& Right) {
 
 static TokenValue EvalLiteralDiv(TokenValue& Left, TokenValue& Right) {
 	double right = Right.GetNumber();
+	
 	if (round(right) == 0.0) {
 		std::cerr << "Warning: Divide by zero\n";
 		return 0.0;
@@ -45,7 +47,7 @@ TokenValue SyntaxTree::Eval() const {
 
 TokenValue SyntaxTree::GetValue() const {
 	if (!_Token.Front()) {
-		return TokenValue(0.0);
+		return 0.0;
 	}
 
 	// Literal number
@@ -63,7 +65,7 @@ TokenValue SyntaxTree::GetValue() const {
 		return 0.0;
 	}
 
-	return it->second;
+	return TokenValue(it->second, _Token.Negative());
 }
 
 TokenValue SyntaxTree::DoFunctionCall() const {
@@ -76,7 +78,7 @@ TokenValue SyntaxTree::DoFunctionCall() const {
 	std::vector<TokenValue> args;
 	std::vector<Token> tokens;
 
-	if (EvalExprList(lexer, _Token._Value._Call, 1, args)) {
+	if (EvalExprList(lexer, _Token._Value._Call, 1, false, args)) {
 		return 0.0;
 	}
 
@@ -90,5 +92,5 @@ TokenValue SyntaxTree::DoFunctionCall() const {
 		return 0.0;
 	}
 
-	return it->second(funcName, args);
+	return TokenValue(it->second(funcName, args), _Token.Negative());
 }

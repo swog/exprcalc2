@@ -3,14 +3,16 @@
 #include "syntaxtree.h"
 
 size_t Lexer::InfixToPostfix(std::vector<Token>& Postfix) {
+	Postfix.clear();
+
 	if (!_Size) {
-		std::cerr << "Warning: InfixToPostfix on empty string\n";
+		if (IsFlagSet(LexerFlags::Verbose)) {
+			std::cerr << "Warning: InfixToPostfix on empty string\n";
+		}
 		return 1;
 	}
 
-	Postfix.clear();
-
-	bool neg = false;
+	_Neg = false;
 
 	std::stack<Token> stack;
 	Token token;
@@ -22,21 +24,20 @@ size_t Lexer::InfixToPostfix(std::vector<Token>& Postfix) {
 		}
 
 		if (token.Type() != TokenType::Operator) {
-			token._Value._Neg = neg;
-			neg = false;
+			token._Value._Neg = _Neg;
+			_Neg = false;
 			Postfix.push_back(token);
 		}
 		else {
 			// Negations are only when followed by an operator
 			if (token.Front() == '-' && IsNegative()) {
-				neg = !neg;
+				_Neg = !_Neg;
 			}
 			// Operators
 			else if (token.Front() != ')') {
 				// Push all operators into postfix by prescedence.
 				// This makes higher prescedence operations be performed first
-				while (token.Front() != '(' && stack.size() 
-					&& Token::GetPrescedence(stack.top().Front()) >= Token::GetPrescedence(token.Front())) {
+				while (token.Front() != '(' && stack.size() && stack.top().Prescedes(token)) {
 					Postfix.push_back(stack.top());
 					stack.pop();
 				}
@@ -52,7 +53,7 @@ size_t Lexer::InfixToPostfix(std::vector<Token>& Postfix) {
 				}
 				// The parenthesis was not closed
 				if (!stack.size() || stack.top().Front() != '(') {
-					std::cerr << "Warning: Expected `)`\n";
+					std::cerr << "Error: Expected `)`\n";
 					return 2;
 				}
 				// Pop the left parenthesis
@@ -88,10 +89,12 @@ size_t Lexer::InfixToPostfix(std::vector<Token>& Postfix) {
 // Must be a shared ptr because the stack holds a list of shared ptrs.
 //	The tree holds a list of shared ptrs because to make child pairs, we need to first access the top 
 // (creating a copy from reference), which cannot be done by unique ptrs
-std::shared_ptr<SyntaxTree> Lexer::PostfixToSyntaxTree(const std::vector<Token>& Postfix) {
+std::shared_ptr<SyntaxTree> Lexer::PostfixToSyntaxTree(const std::vector<Token>& Postfix, bool Verbose) {
 	// This would fault if `Postfix` had no tokens
 	if (!Postfix.size()) {
-		std::cerr << "Warning: PostfixToSyntaxTree empty token vector\n";
+		if (Verbose || IsFlagSet(LexerFlags::Verbose)) {
+			std::cerr << "Warning: PostfixToSyntaxTree empty token vector\n";
+		}
 		return nullptr;
 	}
 
@@ -160,7 +163,8 @@ Token Lexer::Read() {
 		_Index = i;
 	}
 	else if (type == TokenType::Operator) {
-		token = Token(*this, std::string_view(_Input + _Index++, 1), TokenType::Operator);
+		token = Token(*this, std::string_view(_Input + _Index, 1), TokenType::Operator);
+		_Index++;
 	}
 	return token;
 }

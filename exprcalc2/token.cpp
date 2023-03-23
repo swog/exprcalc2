@@ -35,73 +35,85 @@ void Token::Print() const {
 }
 
 TokenValue::TokenValue(class Lexer& Lexer, const Token& Token, enum class TokenType Type)
-	: _Type(Type), _Neg(false), _Num(0.0) {
+	: _Type(Type), _Num(0.0), _Neg(Token._Value._Neg) {
 	if (_Type == TokenType::Number) {
 		std::from_chars(Token._Str.data(), Token._Str.data() + Token._Str.size(), _Num);
 	}
 	else if (_Type == TokenType::FunctionCall) {
-		const char* str; size_t size, index;
-		Lexer.SetString(Token._Str.data(), Token._Str.length(), 
-			&str, &size, &index);
-		auto flags = Lexer.AddFlags(LexerFlags::NoFunctionCalls);
+		LexerState state;
+		Lexer.SetString(Token._Str.data(), Token._Str.length(), state);
+		Lexer.AddFlags(LexerFlags::NoFunctionCalls);
 
 		std::string_view funcName;
 
 		if (Lexer.ReadFunctionName(funcName)) {
-			Lexer.Restore(str, size, index, flags);
+			Lexer.Restore(state);
 			return;
 		}
 		
 		_Call.push_back(funcName);
 
 		Lexer.ReadExpressionList(_Call, '(', ')', ',', false);
-		Lexer.Restore(str, size, index, flags);
+		Lexer.Restore(state);
 	}
 	else if (_Type == TokenType::Vector) {
-		const char* str; size_t size, index;
-		Lexer.SetString(Token._Str.data(), Token._Str.length(),
-			&str, &size, &index);
-		auto flags = Lexer.AddFlags(LexerFlags::NoVectors);
+		LexerState state;
+		Lexer.SetString(Token._Str.data(), Token._Str.length(), state);
+		Lexer.AddFlags(LexerFlags::NoVectors);
 
 		std::vector<std::string_view> strArgs;
 
 		Lexer.ReadExpressionList(strArgs, '<', '>', ',', false);
-		EvalExprList(Lexer, strArgs, 0, _Vec);
-
-		Lexer.Restore(str, size, index, flags);
+		EvalExprList(Lexer, strArgs, 0, state._Neg, _Vec);
+		Lexer.Restore(state);
 	}
 }
 
-size_t EvalExprList(class Lexer& Lexer, const std::vector<std::string_view>& Expr, 
-	size_t Start, std::vector<TokenValue>& Values) {
+size_t EvalExprList(
+	class Lexer&							Lexer,
+	const std::vector<std::string_view>&	Expr,
+	size_t									Start,
+	bool									Neg,
+	std::vector<TokenValue>&				Values
+) {
 	size_t err = 0;
 	std::vector<Token> postfix;
 	
 	// Save indices
-	const char* str; size_t size, index; LexerFlags flags;
-	Lexer.Save(&str, &size, &index, &flags);
-	Lexer.SetFlags(LexerFlags::Normal);
+	LexerState state;
+	Lexer.Save(state);
+	bool verbose = IsLexerFlagSet(Lexer.SetFlags(LexerFlags::Normal), LexerFlags::Verbose);
 
 	for (size_t i = Start; i < Expr.size(); i++) {
 		Lexer.SetString(Expr[i].data(), Expr[i].size());
 
 		if (Lexer.InfixToPostfix(postfix)) {
-			std::cerr << "Warning: EvalExprList InfixToPostfix error\n";
+			if (verbose) {
+				std::cerr << "Warning: EvalExprList InfixToPostfix error\n";
+			}
 			err = 1;
-			break;
 		}
 
-		auto tree = Lexer.PostfixToSyntaxTree(postfix);
+		auto tree = Lexer.PostfixToSyntaxTree(postfix, verbose);
 
 		if (tree) {
-			Values.push_back(tree->Eval());
+			auto res = tree->Eval();
+			res._Neg = Neg;
+
+			Values.push_back(res);
+
+			if (IsLexerFlagSet(state._Flags, LexerFlags::PrintNestedTrees)) {
+				tree->Print();
+			}
 		}
 		else {
-			std::cerr << "Warning: Empty expression separated by commas\n";
+			if (verbose) {
+				std::cerr << "Warning: Empty expression separated by commas\n";
+			}
 			Values.push_back(0.0);
 		}
 	}
 
-	Lexer.Restore(str, size, index, flags);
+	Lexer.Restore(state);
 	return err;
 }
