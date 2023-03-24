@@ -196,7 +196,7 @@ size_t Lexer::ReadFunctionName(std::string& Name) {
 
 size_t Lexer::ReadFunctionName(std::string_view& Name) {
 	if (!IsFlagSet(LexerFlags::NoFunctionCalls)) {
-		std::cerr << "Warning: ReadFunctionName called on expression list lexer\n";
+		std::cerr << "Error: ReadFunctionName called on expression list lexer\n";
 		return 1;
 	}
 
@@ -212,14 +212,14 @@ size_t Lexer::ReadExpressionList(std::vector<std::string_view>& Arguments,
 
 	if ((BeginToken == '(' && !IsFlagSet(LexerFlags::NoFunctionCalls)) || 
 		(BeginToken == '<' && !IsFlagSet(LexerFlags::NoVectors))) {
-		std::cerr << "Warning: ReadExpressionList on expression list lexer\n";
+		std::cerr << "Error: ReadExpressionList on expression list lexer\n";
 		return 1;
 	}
 
 	auto token = Read();
 
 	if (token.Front() != BeginToken) {
-		std::cerr << "Warning: ReadExpressionList on non-expression list\n";
+		std::cerr << "Error: ReadExpressionList on non-expression list\n";
 		return 2;
 	}
 

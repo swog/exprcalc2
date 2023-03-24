@@ -103,7 +103,12 @@ size_t EvalExprList(
 			Values.push_back(res);
 
 			if (IsLexerFlagSet(state._Flags, LexerFlags::PrintNestedTrees)) {
+				std::cout << "Nested tree: " << Lexer.ToString() << '\n';
 				tree->Print();
+				std::cout << "==" << res;
+				if (Neg) {
+					std::cout << " (Negated)\n";
+				}
 			}
 		}
 		else {

@@ -2,34 +2,45 @@
 
 enum class LexerFlags : unsigned char {
 	Normal,
-	NoFunctionCalls,
-	NoVectors,
-	Verbose = 4,
-	PrintNestedTrees,
+	NoFunctionCalls		= (1 << 0),
+	NoVectors			= (1 << 1),
+	Verbose				= (1 << 2),
+	PrintNestedTrees	= (1 << 3),
 };
 
-inline constexpr enum class LexerFlags operator|(LexerFlags Left, LexerFlags Right) {
-	return (LexerFlags)((unsigned char)Left | (unsigned char)Right);
+inline enum LexerFlags LexerFlags() {
+	return LexerFlags::Normal;
 }
 
-inline constexpr enum class LexerFlags operator&(LexerFlags Left, LexerFlags Right) {
-	return (LexerFlags)((unsigned char)Left & (unsigned char)Right);
+inline constexpr enum LexerFlags operator|(enum LexerFlags Left, enum LexerFlags Right) {
+	return (enum LexerFlags)((unsigned char)Left | (unsigned char)Right);
 }
 
-inline constexpr enum class LexerFlags& operator|=(LexerFlags& Left, LexerFlags Right) {
+inline constexpr enum LexerFlags operator&(enum LexerFlags Left, enum LexerFlags Right) {
+	return (enum LexerFlags)((unsigned char)Left & (unsigned char)Right);
+}
+
+inline constexpr enum LexerFlags& operator|=(enum LexerFlags& Left, enum LexerFlags Right) {
 	Left = Left | Right;
 	return Left;
 }
 
-inline constexpr bool IsLexerFlagSet(LexerFlags Flags, LexerFlags Flag) {
+inline constexpr bool IsLexerFlagSet(enum LexerFlags Flags, enum LexerFlags Flag) {
 	return (Flags & Flag) == Flag;
 }
 
 struct LexerState {
+	LexerState()
+		: _Input(NULL), 
+		_Index(0), _Size(0),
+		_Flags(LexerFlags()),
+		_Neg(false) {
+	}
+
 	const char* _Input;
 	size_t		_Index;
 	size_t		_Size;
-	LexerFlags	_Flags;
+	enum LexerFlags	_Flags;
 	Token		_Prev;
 	bool		_Neg;
 };
@@ -38,7 +49,7 @@ class Lexer {
 public:
 	friend class SyntaxTree;
 
-	Lexer(LexerFlags Flags = LexerFlags::Normal) 
+	Lexer(enum LexerFlags Flags = LexerFlags::Normal)
 		: _Input(NULL), _Index(0), _Size(0), _Flags(Flags), _Neg(false) {
 	}
 	
@@ -122,27 +133,31 @@ public:
 		_Index = Index;
 	}
 
-	LexerFlags SetFlags(LexerFlags Flags) {
+	enum LexerFlags SetFlags(enum LexerFlags Flags) {
 		auto flags = _Flags;
 		_Flags = Flags;
 		return flags;
 	}
 
-	LexerFlags AddFlags(LexerFlags Flags) {
+	enum LexerFlags AddFlags(enum LexerFlags Flags) {
 		auto flags = _Flags;
 		_Flags |= Flags;
 		return flags;
 	}
 
-	bool IsFlagSet(LexerFlags Flags) const {
+	bool IsFlagSet(enum LexerFlags Flags) const {
 		return (unsigned char)(_Flags & Flags) != 0;
+	}
+
+	std::string_view ToString() const {
+		return std::string_view(_Input, _Size);
 	}
 
 private:
 	const char* _Input;
 	size_t		_Index;
 	size_t		_Size;
-	LexerFlags	_Flags;
+	enum LexerFlags	_Flags;
 	Token		_Prev;
 	bool		_Neg;
 

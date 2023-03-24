@@ -25,6 +25,12 @@ static TokenValue EvalLiteralDiv(TokenValue& Left, TokenValue& Right) {
 	return Left.GetNumber() / right;
 }
 
+//
+//  If it's an operator, evaluate left and right subtrees, and
+// return result. If not, return it's "useful" value.
+//	E.g. Resolved variable, performed function call return, vector, 
+// or in-text numerical value.
+//
 TokenValue SyntaxTree::Eval() const {
 	if (_Token.Type() == TokenType::Operator && _Left && _Right) {
 		// Eval first so that the types are correct after function calls etc
@@ -71,14 +77,17 @@ TokenValue SyntaxTree::GetValue() const {
 TokenValue SyntaxTree::DoFunctionCall() const {
 	static Lexer lexer;
 
+	// No function name
 	if (_Token._Value._Call.size() < 1) {
+		std::cerr << "Error: No function name in function call\n";
 		return 0.0;
 	}
 
 	std::vector<TokenValue> args;
-	std::vector<Token> tokens;
 
+	// Calculate the comma-separated expressions (ExprList) into args
 	if (EvalExprList(lexer, _Token._Value._Call, 1, false, args)) {
+		std::cerr << "Error: EvalExprList failed in function call\n";
 		return 0.0;
 	}
 

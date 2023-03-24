@@ -232,3 +232,8 @@ size_t EvalExprList(
 	bool									Neg,
 	std::vector<TokenValue>&				Values
 );
+
+inline std::ostream& operator<<(std::ostream& Stream, const TokenValue& Value) {
+	Stream << Value.ToString();
+	return Stream;
+}

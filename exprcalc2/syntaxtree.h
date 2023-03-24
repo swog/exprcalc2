@@ -3,6 +3,9 @@
 typedef TokenValue (*SyntaxCFunc)(const std::string& Name, 
 	const std::vector<TokenValue>& Arguments);
 
+#define DefineSyntaxCFunc(NAME) \
+	TokenValue NAME##(const std::string& Name, const std::vector<TokenValue>& Args)
+
 // SyntaxTree
 //
 //	Syntax trees perform a recursive descent resolution.
