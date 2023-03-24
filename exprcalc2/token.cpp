@@ -2,6 +2,42 @@
 #include "lexer.h"
 #include "syntaxtree.h"
 
+void DestructTokenValue(TokenValue& Tok) {
+	switch (Tok._Type) {
+	case TokenType::Word:
+	case TokenType::Number:
+	case TokenType::Operator:
+		break;
+	case TokenType::Vector:
+		Tok._Un._Vec.~vector();
+		break;
+	case TokenType::FunctionCall:
+		Tok._Un._Call.~vector();
+		break;
+	}
+}
+
+class TokenValue& CopyTokenValue(const TokenValue& From, TokenValue& To) {
+	To._Type = From._Type;
+	To._Neg = From._Neg;
+	switch (From._Type) {
+	case TokenType::Word:
+	case TokenType::Number:
+		To._Un._Num = From._Un._Num;
+		break;
+	case TokenType::Operator:
+		To._Un._Op = From._Un._Op;
+		break;
+	case TokenType::Vector:
+		To._Un._Vec = From._Un._Vec;
+		break;
+	case TokenType::FunctionCall:
+		To._Un._Call = From._Un._Call;
+		break;
+	}
+	return To;
+}
+
 char Token::GetPrescedence(char ch) {
 	switch (ch) {
 	case '^':
@@ -35,9 +71,11 @@ void Token::Print() const {
 }
 
 TokenValue::TokenValue(class Lexer& Lexer, const Token& Token, enum class TokenType Type)
-	: _Type(Type), _Num(0.0), _Neg(Token._Value._Neg) {
+	: _Type(Type), _Neg(Token._Value._Neg), _Un(0.0) {
+	CopyTokenValue(Token._Value, *this);
+
 	if (_Type == TokenType::Number) {
-		std::from_chars(Token._Str.data(), Token._Str.data() + Token._Str.size(), _Num);
+		std::from_chars(Token._Str.data(), Token._Str.data() + Token._Str.size(), _Un._Num);
 	}
 	else if (_Type == TokenType::FunctionCall) {
 		LexerState state;
@@ -51,9 +89,9 @@ TokenValue::TokenValue(class Lexer& Lexer, const Token& Token, enum class TokenT
 			return;
 		}
 		
-		_Call.push_back(funcName);
+		_Un._Call.push_back(funcName);
 
-		Lexer.ReadExpressionList(_Call, '(', ')', ',', false);
+		Lexer.ReadExpressionList(_Un._Call, '(', ')', ',', false);
 		Lexer.Restore(state);
 	}
 	else if (_Type == TokenType::Vector) {
@@ -64,7 +102,7 @@ TokenValue::TokenValue(class Lexer& Lexer, const Token& Token, enum class TokenT
 		std::vector<std::string_view> strArgs;
 
 		Lexer.ReadExpressionList(strArgs, '<', '>', ',', false);
-		EvalExprList(Lexer, strArgs, 0, state._Neg, _Vec);
+		EvalExprList(Lexer, strArgs, 0, state._Neg, _Un._Vec);
 		Lexer.Restore(state);
 	}
 }

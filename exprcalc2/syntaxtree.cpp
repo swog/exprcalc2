@@ -78,7 +78,7 @@ TokenValue SyntaxTree::DoFunctionCall() const {
 	static Lexer lexer;
 
 	// No function name
-	if (_Token._Value._Call.size() < 1) {
+	if (_Token._Value._Un._Call.size() < 1) {
 		std::cerr << "Error: No function name in function call\n";
 		return 0.0;
 	}
@@ -86,13 +86,13 @@ TokenValue SyntaxTree::DoFunctionCall() const {
 	std::vector<TokenValue> args;
 
 	// Calculate the comma-separated expressions (ExprList) into args
-	if (EvalExprList(lexer, _Token._Value._Call, 1, false, args)) {
+	if (EvalExprList(lexer, _Token._Value._Un._Call, 1, false, args)) {
 		std::cerr << "Error: EvalExprList failed in function call\n";
 		return 0.0;
 	}
 
 	// Literal variable reference to number
-	std::string funcName(_Token._Value._Call[0]);
+	std::string funcName(_Token._Value._Un._Call[0]);
 
 	auto it = _CFuncs.find(funcName);
 

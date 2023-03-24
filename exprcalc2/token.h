@@ -12,6 +12,24 @@ enum class TokenType : unsigned char {
 inline constexpr enum class TokenType TokenType(char ch);
 inline constexpr bool TokenTypeIsLiteral(const enum class TokenType type);
 
+union TokenValueData {
+	~TokenValueData() {
+	}
+
+	TokenValueData(double Num) : _Num(Num) {}
+	TokenValueData(size_t Op) : _Op(Op) {}
+	TokenValueData(const std::vector<class TokenValue>& Vec) : _Vec(Vec) {}
+	TokenValueData(const std::vector<std::string_view>& Call) : _Call(Call) {}
+
+	double							_Num;
+	size_t							_Op;
+	std::vector<class TokenValue>	_Vec;
+	std::vector<std::string_view>	_Call;
+};
+
+void		DestructTokenValue(TokenValue& Tok);
+TokenValue& CopyTokenValue(const TokenValue& From, TokenValue& To);
+
 // The value of a token must be disconnected.
 //	After beginning the SyntaxTree resolution, the connection between tokens
 // and the input string becomes skewed.
@@ -21,47 +39,49 @@ public:
 	// Variables will be parsed later in SyntaxTree
 	TokenValue(class Lexer& Lexer, const class Token& Token, enum class TokenType Type);
 
+	~TokenValue() noexcept {
+		DestructTokenValue(*this);
+	}
+
 	TokenValue()
-		: _Type(TokenType::Empty), _Num(0.0), _Neg(false) {
+		: _Type(TokenType::Empty), _Un(0.0), _Neg(false) {
 	}
 
 	TokenValue(const TokenValue& Other)
-		: _Type(Other._Type), _Num(Other._Num), _Vec(Other._Vec), 
-		_Call(Other._Call), _Neg(Other._Neg) {
+		: _Type(Other._Type), _Neg(Other._Neg), _Un(0.0) {
 	}
 
 	TokenValue(enum class TokenType Type) 
-		: _Type(Type), _Num(0.0), _Neg(false) {
+		: _Type(Type), _Un(0.0), _Neg(false) {
 	}
 
 	TokenValue(double Num)
-		: _Type(TokenType::Number), _Num(Num), _Neg(false) {
+		: _Type(TokenType::Number), _Un(Num), _Neg(false) {
 	}
 
-	TokenValue(const TokenValue& Other, bool Neg)
-		: _Type(Other._Type), _Num(Other._Num), _Vec(Other._Vec),
-		_Call(Other._Call), _Neg(Neg) {
+	TokenValue(const TokenValue& Other, bool Neg) : _Un(0.0), _Neg(Neg) {
+		CopyTokenValue(Other, *this);
 	}
 
 	TokenValue(const std::vector<std::string_view>& Call)
-		: _Type(TokenType::FunctionCall), _Num(0.0), _Call(Call), _Neg(false) {
+		: _Type(TokenType::FunctionCall), _Neg(false), _Un(Call) {
 	}
 
 	TokenValue(const std::vector<TokenValue>& Vec)
-		: _Type(TokenType::Vector), _Num(0.0), _Vec(Vec), _Neg(false) {
+		: _Type(TokenType::Vector), _Un(Vec), _Neg(false) {
 	}
 
 	inline constexpr double GetNumber() const {
-		return _Neg ? -_Num : _Num;
+		return _Neg ? -_Un._Num : _Un._Num;
 	}
 
 	std::string ToString() const {
 		switch (_Type) {
 		case TokenType::Vector: {
 			std::string s = "<";
-			for (size_t i = 0; i < _Vec.size(); i++) {
-				s += _Vec[i].ToString();
-				if (i != _Vec.size() - 1)
+			for (size_t i = 0; i < _Un._Vec.size(); i++) {
+				s += _Un._Vec[i].ToString();
+				if (i != _Un._Vec.size() - 1)
 					s += ", ";
 			}
 			s += ">";
@@ -109,16 +129,16 @@ public:
 	// Performs a TokenOp per vector value
 	static TokenValue PerformVecLit(const TokenValue& Left, const TokenValue& Right, TokenOp Op) {
 		TokenValue ret(TokenType::Vector);
-		for (size_t i = 0; i < Left._Vec.size(); i++) {
-			ret._Vec.push_back(Left._Vec[i].PerformOp(Right, Op));
+		for (size_t i = 0; i < Left._Un._Vec.size(); i++) {
+			ret._Un._Vec.push_back(Left._Un._Vec[i].PerformOp(Right, Op));
 		}
 		return ret;
 	}
 
 	static TokenValue PerformLitVec(const TokenValue& Left, const TokenValue& Right, TokenOp Op) {
 		TokenValue ret(TokenType::Vector);
-		for (size_t i = 0; i < Right._Vec.size(); i++) {
-			ret._Vec.push_back(Left.PerformOp(Right._Vec[i], Op));
+		for (size_t i = 0; i < Right._Un._Vec.size(); i++) {
+			ret._Un._Vec.push_back(Left.PerformOp(Right._Un._Vec[i], Op));
 		}
 		return ret;
 	}
@@ -153,11 +173,21 @@ public:
 		return PerformOp(Right, PerformLitExp);
 	}
 
+	TokenValue& operator=(const TokenValue& Other) {
+		DestructTokenValue(*this);
+		CopyTokenValue(Other, *this);
+		return *this;
+	}
+
+	TokenValue& operator=(TokenValue&& Other) noexcept {
+		CopyTokenValue(Other, *this);
+		Other._Type = TokenType::Empty;
+		return *this;
+	}
+
 	enum class TokenType			_Type;
-	double							_Num;
 	bool							_Neg;
-	std::vector<TokenValue>			_Vec;
-	std::vector<std::string_view>	_Call;
+	TokenValueData					_Un;
 };
 
 class Token {
