@@ -114,6 +114,9 @@ TokenValue::TokenValue(class Lexer& Lexer, const Token& Token, enum class TokenT
 	if (_Type == TokenType::Number) {
 		std::from_chars(Token._Str.data(), Token._Str.data() + Token._Str.size(), _Un._Num);
 	}
+	else if (_Type == TokenType::Operator) {
+		_Un._Op = Lexer.ParseOperator(Token);
+	}
 	else if (_Type == TokenType::FunctionCall) {
 		LexerState state;
 		Lexer.SetString(Token._Str.data(), Token._Str.length(), state);

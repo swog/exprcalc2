@@ -36,7 +36,8 @@ TokenValue SyntaxTree::Eval() const {
 		// Eval first so that the types are correct after function calls etc
 		TokenValue Left = _Left->Eval(), Right = _Right->Eval();
 		// Literal Literal
-		switch (_Token.Front()) {
+		switch (_Token.GetOp()) {
+		case '**':
 		case '^': return Left ^ Right;
 		case '*': return Left * Right;
 		case '/': return Left / Right;

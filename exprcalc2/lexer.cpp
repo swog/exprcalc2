@@ -75,7 +75,7 @@ size_t Lexer::InfixToPostfix(std::vector<Token>& Postfix) {
 	for (size_t i = 0; i < Postfix.size(); i++) {
 		if (Postfix[i].Front() == '(') {
 			unclosed++;
-			Postfix[i]._Value = 0.0;
+			Postfix[i]._Value = TokenType::Empty;
 		}
 	}
 
@@ -128,18 +128,20 @@ Lexer::PostfixToSyntaxTree(
 Token Lexer::Read() {
 	auto type = TokenType(_Input[_Index]);
 	Token token;
-	// Word or number
-	// `<` hacky fix for a vector that doesn't start with `vec<`
-	if (TokenTypeIsLiteral(type) || _Input[_Index] == '<') {
-		size_t i;
-
-		// Match until type change
-		for (i = _Index + 1; i < _Size && _Input[i]; i++) {
-			if (type != TokenType(_Input[i])) {
+	
+	size_t i = _Index + 1;
+	// Match until type change
+	if (!Token::IsSingleOperator(_Input[_Index])) {
+		for (; i < _Size && _Input[i]; i++) {
+			if (type != TokenType(_Input[i]) || Token::IsSingleOperator(_Input[i])) {
 				break;
 			}
 		}
+	}
 
+	// Word or number
+	// `<` hacky fix for a vector that doesn't start with `vec<`
+	if (TokenTypeIsLiteral(type) || _Input[_Index] == '<') {
 		// A literal alphabetical followed by a `(` signifies a function call
 		// ExpressionLists are collected by default
 		// `NoExpressionLists` ignores expression lists
@@ -167,23 +169,8 @@ Token Lexer::Read() {
 		_Index = i;
 	}
 	else if (type == TokenType::Operator) {
-		token = Token(*this, std::string_view(_Input + _Index, 1), TokenType::Operator);
-		_Index++;
-	}
-	return token;
-}
-
-Token Lexer::Peek() {
-	auto type = TokenType(_Input[_Index]);
-	Token token;
-	size_t i;
-	for (i = _Index + 1; i < _Size && _Input[i]; i++) {
-		if (type != TokenType(_Input[i])) {
-			break;
-		}
-	}
-	if (i - _Index - 1) {
-		token = Token(*this, std::string_view(_Input + _Index + 1, i - _Index - 1), type);
+		token = Token(*this, std::string_view(_Input + _Index, i - _Index), TokenType::Operator);
+		_Index = i;
 	}
 	return token;
 }

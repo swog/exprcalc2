@@ -71,7 +71,6 @@ public:
 	}
 
 	Token Read();
-	Token Peek();
 
 	bool IsNegative();
 
@@ -151,6 +150,15 @@ public:
 
 	std::string_view ToString() const {
 		return std::string_view(_Input, _Size);
+	}
+
+	size_t ParseOperator(const Token& Tok) const {
+		size_t op = 0;
+		char* pOp = (char*)&op;
+		for (size_t i = 0; i < sizeof(op) && i < Tok._Str.size(); i++) {
+			pOp[i] = Tok._Str[i];
+		}
+		return op;
 	}
 
 private:

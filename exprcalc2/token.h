@@ -231,6 +231,10 @@ public:
 			ch == '(' || ch == ')' || ch == '%' || ch == '<' || ch == '>' || ch == ',';
 	}
 
+	static inline constexpr bool IsSingleOperator(char ch) {
+		return ch == '(' || ch == ')' || ch == '-';
+	}
+
 	static char GetPrescedence(char ch);
 	
 	bool Prescedes(const Token& Other) const {
@@ -251,6 +255,10 @@ public:
 
 	char Front() const {
 		return _Str.length() ? _Str.front() : 0;
+	}
+
+	size_t GetOp() const {
+		return _Value._Un._Op;
 	}
 
 	enum class TokenType Type() const {
