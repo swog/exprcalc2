@@ -98,6 +98,6 @@ Eval(
 }
 
 int main() {
-	const char str[] = "2**(3-1)";
+	const char str[] = "2*********(3-1)";
 	std::cout << Eval(str) << std::endl;
 } 

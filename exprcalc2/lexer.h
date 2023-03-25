@@ -155,8 +155,12 @@ public:
 	size_t ParseOperator(const Token& Tok) const {
 		size_t op = 0;
 		char* pOp = (char*)&op;
-		for (size_t i = 0; i < sizeof(op) && i < Tok._Str.size(); i++) {
+		size_t i;
+		for (i = 0; i < sizeof(op) && i < Tok._Str.size(); i++) {
 			pOp[i] = Tok._Str[i];
+		}
+		if (i == sizeof(op)) {
+			std::cerr << "Warning: ParseOperator bad operator of length " << Tok._Str.size() << " (>" << sizeof(op) << ")\n";
 		}
 		return op;
 	}
