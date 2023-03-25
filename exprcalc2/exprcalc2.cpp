@@ -98,6 +98,6 @@ Eval(
 }
 
 int main() {
-	const char str[] = "-cos(pi)*2*-<1,2*-2,,3>";
+	const char str[] = "<1,2,3,4>*-2";
 	std::cout << Eval(str) << std::endl;
 } 

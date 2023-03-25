@@ -17,26 +17,31 @@ public:
 		_Right.reset();
 	}
 
-	SyntaxTree(const class Token& Token, 
-		std::shared_ptr<SyntaxTree> Left, std::shared_ptr<SyntaxTree> Right) {
-		_Token = Token;
-		_Left = Left;
-		_Right = Right;
+	SyntaxTree(
+		const class Token& Token, 
+		std::shared_ptr<SyntaxTree> Left, 
+		std::shared_ptr<SyntaxTree> Right
+	) : _Token(Token),
+		_Left(Left),
+		_Right(Right) {
 	}
 
-	void Print(size_t Depth = 0) {
-		for (size_t i = 0; i < Depth; i++)
+	void Print(size_t Depth = 0) const {
+		for (size_t i = 0; i < Depth; i++) {
 			std::cout << '\t';
+		}
 
 		_Token.Print();
 
 		Depth++;
 
-		if (_Left)
+		if (_Left) {
 			_Left->Print(Depth);
+		}
 
-		if (_Right)
+		if (_Right) {
 			_Right->Print(Depth);
+		}
 	}
 
 	TokenValue Eval() const;
@@ -44,7 +49,7 @@ public:
 	// Resolve variable from _Globals or parsed numeric
 	TokenValue GetValue() const;
 
-	Token _Token;
+	const Token& _Token;
 	std::shared_ptr<SyntaxTree> _Left, _Right;
 
 	static std::unordered_map<std::string, TokenValue>	_Globals;

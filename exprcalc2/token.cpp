@@ -17,9 +17,27 @@ void DestructTokenValue(TokenValue& Tok) {
 	}
 }
 
+TokenValue& InitTokenValue(TokenValue& Tok) {
+	memset(&Tok._Un, 0, sizeof(Tok._Un));
+	switch (Tok._Type) {
+	case TokenType::Word:
+	case TokenType::Number:
+		Tok._Un._Num = 0.0;
+		break;
+	case TokenType::Operator:
+		Tok._Un._Op = 0;
+		break;
+	case TokenType::Vector:
+		Tok._Un._Vec = std::vector<TokenValue>();
+		break;
+	case TokenType::FunctionCall:
+		Tok._Un._Call = std::vector<std::string_view>();
+		break;
+	}
+	return Tok;
+}
+
 class TokenValue& CopyTokenValue(const TokenValue& From, TokenValue& To) {
-	To._Type = From._Type;
-	To._Neg = From._Neg;
 	switch (From._Type) {
 	case TokenType::Word:
 	case TokenType::Number:
@@ -33,6 +51,25 @@ class TokenValue& CopyTokenValue(const TokenValue& From, TokenValue& To) {
 		break;
 	case TokenType::FunctionCall:
 		To._Un._Call = From._Un._Call;
+		break;
+	}
+	return To;
+}
+
+TokenValue& MoveTokenValue(TokenValue& From, TokenValue& To) {
+	switch (From._Type) {
+	case TokenType::Word:
+	case TokenType::Number:
+		To._Un._Num = From._Un._Num;
+		break;
+	case TokenType::Operator:
+		To._Un._Op = From._Un._Op;
+		break;
+	case TokenType::Vector:
+		To._Un._Vec = std::move(From._Un._Vec);
+		break;
+	case TokenType::FunctionCall:
+		To._Un._Call = std::move(From._Un._Call);
 		break;
 	}
 	return To;
@@ -71,8 +108,8 @@ void Token::Print() const {
 }
 
 TokenValue::TokenValue(class Lexer& Lexer, const Token& Token, enum class TokenType Type)
-	: _Type(Type), _Neg(Token._Value._Neg), _Un(0.0) {
-	CopyTokenValue(Token._Value, *this);
+	: _Type(Type), _Neg(Lexer.IsNegative()), _Un(0.0) {
+	InitTokenValue(*this);
 
 	if (_Type == TokenType::Number) {
 		std::from_chars(Token._Str.data(), Token._Str.data() + Token._Str.size(), _Un._Num);

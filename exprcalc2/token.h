@@ -12,10 +12,13 @@ enum class TokenType : unsigned char {
 inline constexpr enum class TokenType TokenType(char ch);
 inline constexpr bool TokenTypeIsLiteral(const enum class TokenType type);
 
+//	Store all memory into this.
+// Better for endless copies, as the current model does.
+//	TokenValue stores type number `TokenType` and handles data accordingly.
+// TokenValue uses the methods following `DestructTokenValue` to handle lvalue & rvalue
+// assignments.
 union TokenValueData {
-	~TokenValueData() {
-	}
-
+	~TokenValueData() {}
 	TokenValueData(double Num) : _Num(Num) {}
 	TokenValueData(size_t Op) : _Op(Op) {}
 	TokenValueData(const std::vector<class TokenValue>& Vec) : _Vec(Vec) {}
@@ -27,8 +30,13 @@ union TokenValueData {
 	std::vector<std::string_view>	_Call;
 };
 
-void		DestructTokenValue(TokenValue& Tok);
+//	Note: These methods do not explicitly change anything but the TokenValueData union.
+// Furthermore, constructors and destructors are required to initialize _Type, _Neg explicitly
+// before or after calling these methods.
+void		DestructTokenValue(class TokenValue& Tok);
+TokenValue&	InitTokenValue(TokenValue& Tok);
 TokenValue& CopyTokenValue(const TokenValue& From, TokenValue& To);
+TokenValue& MoveTokenValue(TokenValue& From, TokenValue& To);
 
 // The value of a token must be disconnected.
 //	After beginning the SyntaxTree resolution, the connection between tokens
@@ -36,30 +44,41 @@ TokenValue& CopyTokenValue(const TokenValue& From, TokenValue& To);
 class TokenValue {
 public:
 	// Parse static values
-	// Variables will be parsed later in SyntaxTree
+	// Variables will be parsed later in SyntaxTree, see SyntaxTree::Eval.
 	TokenValue(class Lexer& Lexer, const class Token& Token, enum class TokenType Type);
 
-	~TokenValue() noexcept {
+	~TokenValue() {
+		// Destroy if valid type
 		DestructTokenValue(*this);
 	}
 
 	TokenValue()
 		: _Type(TokenType::Empty), _Un(0.0), _Neg(false) {
+		// Initialize to empty
 	}
 
 	TokenValue(const TokenValue& Other)
 		: _Type(Other._Type), _Neg(Other._Neg), _Un(0.0) {
+		// Initialize this type, then copy from `Other`
+		InitTokenValue(*this);
+		CopyTokenValue(Other, *this);
 	}
 
 	TokenValue(enum class TokenType Type) 
 		: _Type(Type), _Un(0.0), _Neg(false) {
+		// Initialize for this type
+		InitTokenValue(*this);
 	}
 
 	TokenValue(double Num)
 		: _Type(TokenType::Number), _Un(Num), _Neg(false) {
 	}
 
-	TokenValue(const TokenValue& Other, bool Neg) : _Un(0.0), _Neg(Neg) {
+	TokenValue(const TokenValue& Other, bool Neg) 
+		: _Type(Other._Type), _Un(0.0), _Neg(Neg) {
+		// Initialize to the other's type
+		// Then copy with that type
+		InitTokenValue(*this);
 		CopyTokenValue(Other, *this);
 	}
 
@@ -69,6 +88,32 @@ public:
 
 	TokenValue(const std::vector<TokenValue>& Vec)
 		: _Type(TokenType::Vector), _Un(Vec), _Neg(false) {
+	}
+
+	TokenValue& operator=(const TokenValue& Other) {
+		// Free up this type
+		DestructTokenValue(*this);
+		// Copy type info to initialize & copy
+		_Type = Other._Type;
+		_Neg = Other._Neg;
+		InitTokenValue(*this);
+		CopyTokenValue(Other, *this);
+		return *this;
+	}
+
+	TokenValue& operator=(TokenValue&& Other) noexcept {
+		// Free up old memory via type
+		DestructTokenValue(*this);
+		// Copy type info to initialize
+		_Type = Other._Type;
+		_Neg = Other._Neg;
+		InitTokenValue(*this);
+		// Move over the data
+		MoveTokenValue(Other, *this);
+		// Nullify old type so it doesn't get released
+		Other._Type = TokenType::Empty;
+		//Other._Neg = false;
+		return *this;
 	}
 
 	inline constexpr double GetNumber() const {
@@ -173,20 +218,9 @@ public:
 		return PerformOp(Right, PerformLitExp);
 	}
 
-	TokenValue& operator=(const TokenValue& Other) {
-		DestructTokenValue(*this);
-		CopyTokenValue(Other, *this);
-		return *this;
-	}
-
-	TokenValue& operator=(TokenValue&& Other) noexcept {
-		CopyTokenValue(Other, *this);
-		Other._Type = TokenType::Empty;
-		return *this;
-	}
-
 	enum class TokenType			_Type;
 	bool							_Neg;
+	// Union containing all types
 	TokenValueData					_Un;
 };
 
@@ -203,9 +237,10 @@ public:
 		return GetPrescedence(Front()) >= GetPrescedence(Other.Front());
 	}
 
-	Token() {
-	}
+	// Default constructors
+	Token() {}
 
+	// Initialize `TokenValue` via its constructor that parses that type.
 	Token(class Lexer& Lexer, std::string_view Str, enum class TokenType Type)
 		: _Str(Str), _Value(Lexer, *this, Type) {
 	}

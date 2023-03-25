@@ -89,7 +89,11 @@ size_t Lexer::InfixToPostfix(std::vector<Token>& Postfix) {
 // Must be a shared ptr because the stack holds a list of shared ptrs.
 //	The tree holds a list of shared ptrs because to make child pairs, we need to first access the top 
 // (creating a copy from reference), which cannot be done by unique ptrs
-std::shared_ptr<SyntaxTree> Lexer::PostfixToSyntaxTree(const std::vector<Token>& Postfix, bool Verbose) {
+std::shared_ptr<SyntaxTree>
+Lexer::PostfixToSyntaxTree(
+	const std::vector<Token>& Postfix, 
+	bool Verbose
+) {
 	// This would fault if `Postfix` had no tokens
 	if (!Postfix.size()) {
 		if (Verbose || IsFlagSet(LexerFlags::Verbose)) {
