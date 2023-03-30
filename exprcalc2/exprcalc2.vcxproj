@@ -138,12 +138,16 @@
     </ClCompile>
     <ClCompile Include="syntaxtree.cpp" />
     <ClCompile Include="token.cpp" />
+    <ClCompile Include="tokentype.cpp" />
+    <ClCompile Include="tokenvalue.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="lexer.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="syntaxtree.h" />
     <ClInclude Include="token.h" />
+    <ClInclude Include="tokentype.h" />
+    <ClInclude Include="tokenvalue.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
