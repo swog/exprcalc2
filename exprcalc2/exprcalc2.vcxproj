@@ -131,6 +131,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="environment.cpp" />
     <ClCompile Include="exprcalc2.cpp" />
     <ClCompile Include="lexer.cpp" />
     <ClCompile Include="stdafx.cpp">

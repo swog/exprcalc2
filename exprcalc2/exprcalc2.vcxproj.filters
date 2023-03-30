@@ -36,6 +36,9 @@
     <ClCompile Include="tokentype.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="environment.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="stdafx.h">
