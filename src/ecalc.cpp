@@ -4,7 +4,7 @@
 
 static int prec(int c) {
 	switch (c) {
-	case '^'
+	case '^':
 		return 3;
 	case '*':
 	case '/':
