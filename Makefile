@@ -1,5 +1,5 @@
 
-CC := g++
+CC := g++ -D DEBUG
 LD := ld
 
 SRC_FILES := $(shell find src -name *.cpp)
