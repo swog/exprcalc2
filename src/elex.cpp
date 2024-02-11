@@ -17,48 +17,70 @@ int etok(	const char* str, size_t size, size_t& pos,
 #define DbgPrintf
 #endif
 
-static double elex_evaladd(double left, double right) {
+#define PREC_ADD 1
+#define PREC_SUB 1
+#define PREC_MUL 2
+#define PREC_DIV 2
+
+static double evaladd(double left, double right) {
 	DbgPrintf("%f+%f\n", left, right);
 	return left+right;
 }
 
-static double elex_evalsub(double left, double right) {
+static elex_op addop = {PREC_ADD, evaladd};
+
+static double evalsub(double left, double right) {
 	DbgPrintf("%f-%f\n", left, right);
 	return left-right;
 }
 
-static double elex_evalmul(double left, double right) {
+static elex_op subop = {PREC_SUB, evalsub};
+
+static double evalmul(double left, double right) {
 	DbgPrintf("%f*%f\n", left, right);
 	return left*right;
 }
 
-static double elex_evaldiv(double left, double right) {
+static elex_op mulop = {PREC_MUL, evalmul};
+
+static double evaldiv(double left, double right) {
 	DbgPrintf("%f/%f\n", left, right);
 	return left/right;
 }
 
-static int elex_popframe(
-	std::stack<double>& vals,
-	std::stack<elex_evalfn>& ops
+static elex_op divop = {PREC_DIV, evaldiv};
+
+static elex_op nulop = {0, NULL};
+
+// Close a frame (parenthetical expression)
+static int performop(
+	const elex_op* 			op,
+	std::stack<double>& 		vals,
+	std::stack<const elex_op*>& 	ops,
+	bool		 		push
 ) {
 	// Perform operations
-	while (!ops.empty()) {
+	while (!ops.empty() && ops.top()->prec >= op->prec) {
 		// Until '(', a NULL function
-		if (ops.top() == NULL) {
-			ops.pop();
+		if (ops.top()->fn == NULL) {
+			// Only pop frame `(` until `)`
+			if (op == &nulop) {
+				ops.pop();
+			}
+
 			break;
 		}
 		// There is not enough things to pop off the stack.
 		else if (vals.size() < 2) {
-			return 1;
+			return elex_err_operand;
 		}
 		else {
-			elex_evalfn fn = ops.top();
-
-			double left = vals.top();
-			vals.pop();
+			elex_evalfn fn = ops.top()->fn;
 
 			double right = vals.top();
+			vals.pop();
+
+			double left = vals.top();
 			vals.pop();
 
 			vals.push(fn(left, right));
@@ -66,76 +88,131 @@ static int elex_popframe(
 		}
 	}
 
-	return 0;
+	if (push) {
+		ops.push(op);
+	}
+
+	return elex_err_none;
 }
 
-// To fix the unary issue:
-// This will be blazing fast...
-// 1. We need to count op frames (0 := unary)
-// 2. Keep previous token type (etok_type_punct := unary)
+// ecalc variable declaration warranted a state
+typedef struct {
+	// Position in the string input
+	size_t pos;
+	// Token precedence
+	const elex_op* op;
+	// Token
+	char tok[32];
+	// Current type
+	etok_type type;
+	// Previous type
+	etok_type ptype;
+	// Coefficient of the current alphanumeric token gathered from negatives
+	double coeff;
+	// Operator stack
+	// NULL pointers are open parenthesis.
+	std::stack<const elex_op*> ops;
+	// Value stack
+	std::stack<double> vals;
+} ecalc_state;
+
 int ecalc(const char* str, double& res) {
-	size_t 			size;
-	size_t 			pos;
+	size_t 	size;
+	int	err;
 	
-	int			err;
-	char 			tok[32];
-	etok_type 		type;
+	ecalc_state s;
+	s.pos = 0;
+	s.ptype = etok_type_null;
+	s.coeff = 1.0;
+	s.op = &nulop;
 
-	std::stack<elex_evalfn> 	ops;
-	std::stack<double>		val;
-
-	res = 0.0;
-	pos = 0;
+	//res = 0.0;
 	size = strlen(str)+1;
 
 	size_t i;
 
 	for (i = 0; i < 256; i++) {
-		err = etok(str, size, pos, tok, sizeof(tok), type);
+		err = etok(str, size, s.pos, s.tok, sizeof(s.tok), s.type);
 
-		if (err != etok_success) {
+		// Tokenizer error
+		if (err != etok_err_none) {
+			// EOS `errors` are ignored
+			if (err != etok_err_eos) {
+				return elex_err_tokenizer;
+			}
+
 			break;
 		}
 		
 		// Push alphanumeric
-		if (type == etok_type_alnum) {
-			val.push(atof(tok));
+		if (s.type == etok_type_alnum) {
+			s.vals.push(s.coeff*atof(s.tok));
+			s.coeff = 1.0;
 		}
-		else if (type == etok_type_punct) {
-			switch (tok[0]) {
-			case '+':
-				ops.push(elex_evaladd);
+		else if (s.type == etok_type_punct) {
+			switch (s.tok[0]) {	
+			case '(':
+				s.op = &nulop;
+				s.ops.push(s.op);
+				err = 0;
+				break;
+			case ')':
+				s.op = &nulop;
+				err = performop(s.op, s.vals, s.ops, false);
 				break;
 			case '-':
-				val.push(-1.0);
-				ops.push(elex_evalsub);
+				// Negatives
+				if (s.ptype != etok_type_alnum) {
+					s.coeff *= -1.0;
+					err = 0;
+					break;
+				}
+				
+				s.op = &subop;
+				err = performop(s.op, s.vals, s.ops, true);
+				break;	
+			case '+':
+				s.op = &addop;
+				err = performop(s.op, s.vals, s.ops, true);
 				break;
 			case '*':
-				ops.push(elex_evalmul);
+				s.op = &mulop;
+				err = performop(s.op, s.vals, s.ops, true);
 				break;
 			case '/':
-				ops.push(elex_evaldiv);				
-				break;
-			case '(':
-				ops.push(NULL);
-				break;
-			// I don't think we set fc=0 here
-			// We need frame count to be zero only when '(' 
-			case ')':
-				elex_popframe(val, ops);
-				break;
+				s.op = &divop;
+				err = performop(s.op, s.vals, s.ops, true);
+				break;	
 			default:
-				return elex_err_unk;
+				return elex_err_operator;
+			}
+
+			if (err != 0) {
+				return err;
 			}
 		}
+
+		s.ptype = s.type;
 	}
 
 	if (i == 256) {
-		return elex_err_tmt;
+		return elex_err_big;
 	}
 
-	elex_popframe(val, ops);
-	res = val.top();
+	// Pop the rest of the arguments
+	err = performop(&nulop, s.vals, s.ops, false);
 
-	return (val.size() != 1 || !ops.empty()) ? elex_err_unclosed : elex_success;
+	if (err) {
+		return err;
+	}
+
+	// No values
+	if (s.vals.empty()) {
+		res = 0.0;
+		return elex_err_none;
+	}
+
+	res = s.vals.top();
+
+	return elex_err_none;
 }

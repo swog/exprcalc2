@@ -35,7 +35,7 @@ int etok(	const char* str, size_t size, size_t& pos,
 		tok[1] = '\0';
 		type = etok_type_punct;
 
-		return etok_success;
+		return etok_err_none;
 	}
 
 	/* Skip to alphanumeric. */
@@ -66,7 +66,7 @@ int etok(	const char* str, size_t size, size_t& pos,
 	tok[len++] = '\0';
 	type = etok_type_alnum;
 
-	return etok_success;
+	return etok_err_none;
 }
 
 

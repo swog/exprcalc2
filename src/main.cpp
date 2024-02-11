@@ -8,8 +8,12 @@ int main(int argc, char** argv) {
 	}
 
 	double val;
-	int r = ecalc(argv[1], val);
+	int r = ecalc(argv[1], val);	
 
-	printf("rcode: %i\n", r);
+	if (r != 0) {
+		printf("err: %i\n", r);
+		return 1;
+	}
+
 	printf("`%s`=%f\n", argv[1], val);
 }

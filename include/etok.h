@@ -3,7 +3,7 @@
 
 /* etok return values. */
 enum etok_err : int {
-	etok_success = 0, 	/* success = 0 */
+	etok_err_none = 0, 	/* success = 0 */
 	etok_err_eos,		/* end of string */
 	etok_err_oob,		/* out of bounds */
 };
