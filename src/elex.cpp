@@ -22,6 +22,8 @@ int etok(	const char* str, size_t size, size_t& pos,
 #define PREC_MUL 2
 #define PREC_DIV 2
 
+static elex_op nulop = {0, NULL};
+
 static double evaladd(double left, double right) {
 	DbgPrintf("%f+%f\n", left, right);
 	return left+right;
@@ -50,7 +52,6 @@ static double evaldiv(double left, double right) {
 
 static elex_op divop = {PREC_DIV, evaldiv};
 
-static elex_op nulop = {0, NULL};
 
 // Close a frame (parenthetical expression)
 static int performop(
@@ -146,22 +147,33 @@ int ecalc(const char* str, double& res) {
 		
 		// Push alphanumeric
 		if (s.type == etok_type_alnum) {
+			// This works for negatives, reset coefficient
 			s.vals.push(s.coeff*atof(s.tok));
+			// Punctuation parsing will keep track of the actual negative value.
+			// However, only use it once.
 			s.coeff = 1.0;
 		}
+		// Punctuation; operators
 		else if (s.type == etok_type_punct) {
+			// The tokenizer spits out 1 character long punctuation tokens
 			switch (s.tok[0]) {	
+			// Don't pop from the ops stack, only push `(`
+			// This marks the end of the frame in the stack.
 			case '(':
 				s.op = &nulop;
 				s.ops.push(s.op);
 				err = 0;
 				break;
+			// Performop, but don't push nulop
 			case ')':
 				s.op = &nulop;
 				err = performop(s.op, s.vals, s.ops, false);
 				break;
+			// Performop only if it's not a negative unary
 			case '-':
 				// Negatives
+				// Multiply coefficient by -1 to keep track of multiple
+				// -negatives.
 				if (s.ptype != etok_type_alnum) {
 					s.coeff *= -1.0;
 					err = 0;
@@ -171,6 +183,9 @@ int ecalc(const char* str, double& res) {
 				s.op = &subop;
 				err = performop(s.op, s.vals, s.ops, true);
 				break;	
+			//   These are simple performops that perform everything
+			// with >= precedence with the operation. Then push the
+			// current operation.
 			case '+':
 				s.op = &addop;
 				err = performop(s.op, s.vals, s.ops, true);
@@ -183,6 +198,7 @@ int ecalc(const char* str, double& res) {
 				s.op = &divop;
 				err = performop(s.op, s.vals, s.ops, true);
 				break;	
+			// Unknown operation
 			default:
 				return elex_err_operator;
 			}
@@ -192,9 +208,11 @@ int ecalc(const char* str, double& res) {
 			}
 		}
 
+		// Only used for negation
 		s.ptype = s.type;
 	}
 
+	// >= 256 tokens, fishy usage
 	if (i == 256) {
 		return elex_err_big;
 	}
@@ -206,7 +224,7 @@ int ecalc(const char* str, double& res) {
 		return err;
 	}
 
-	// No values
+	// No values; not an error just 0
 	if (s.vals.empty()) {
 		res = 0.0;
 		return elex_err_none;
