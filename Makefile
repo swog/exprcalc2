@@ -1,5 +1,11 @@
 
-CC := g++ -D DEBUG
+ifeq ($(DEBUG), 1)
+	CFLAGS := -DDEBUG
+else
+	CFLAGS :=
+endif 
+
+CC := g++ $(CFLAGS)
 LD := ld
 
 SRC_FILES := $(shell find src -name *.cpp)

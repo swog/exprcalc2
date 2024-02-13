@@ -1,5 +1,7 @@
 #include <stack>
 #include <vector>
+#include <string>
+#include <unordered_map>
 #include <iostream>
 #include <cstring>
 #include "elex.h"
@@ -52,11 +54,17 @@ static double evaldiv(double left, double right) {
 
 static elex_op divop = {PREC_DIV, evaldiv};
 
+// Literal
+typedef struct {
+	std::string tok;
+	double val;
+	bool alpha : 1;
+} elex_lit;
 
 // Close a frame (parenthetical expression)
 static int performop(
 	const elex_op* 			op,
-	std::stack<double>& 		vals,
+	std::stack<elex_lit>& 		vals,
 	std::stack<const elex_op*>& 	ops,
 	bool		 		push
 ) {
@@ -78,13 +86,13 @@ static int performop(
 		else {
 			elex_evalfn fn = ops.top()->fn;
 
-			double right = vals.top();
+			double right = vals.top().val;
 			vals.pop();
 
-			double left = vals.top();
+			double left = vals.top().val;
 			vals.pop();
 
-			vals.push(fn(left, right));
+			vals.push({"", fn(left, right), false});
 			ops.pop();
 		}
 	}
@@ -114,10 +122,10 @@ typedef struct {
 	// NULL pointers are open parenthesis.
 	std::stack<const elex_op*> ops;
 	// Value stack
-	std::stack<double> vals;
+	std::stack<elex_lit> vals;
 } ecalc_state;
 
-int ecalc(const char* str, double& res) {
+int ecalc(const char* str, double& res, const std::unordered_map<std::string, double>& globals) {
 	size_t 	size;
 	int	err;
 	
@@ -147,8 +155,29 @@ int ecalc(const char* str, double& res) {
 		
 		// Push alphanumeric
 		if (s.type == etok_type_alnum) {
+			double val;
+			bool alpha = false;			
+
+			if (isalpha(s.tok[0])) {
+				const auto map = globals.find(s.tok);
+
+				// Functions?
+				if (map == globals.cend()) {
+					//return elex_err_global;
+					val = 0.0;
+				}
+				else {
+					val = map->second;
+				}
+
+				alpha = true;
+			}
+			else {
+				val = atof(s.tok);
+			}
+
 			// This works for negatives, reset coefficient
-			s.vals.push(s.coeff*atof(s.tok));
+			s.vals.push({s.tok, s.coeff*val, alpha});
 			// Punctuation parsing will keep track of the actual negative value.
 			// However, only use it once.
 			s.coeff = 1.0;
@@ -160,9 +189,17 @@ int ecalc(const char* str, double& res) {
 			// Don't pop from the ops stack, only push `(`
 			// This marks the end of the frame in the stack.
 			case '(':
-				s.op = &nulop;
-				s.ops.push(s.op);
-				err = 0;
+				// Alphanumeric previous value means function call.
+				// Recursive call to ecalc
+				if (s.ptype == etok_type_alnum && !s.vals.empty() && s.vals.top().alpha) {
+					// Handle functions here	
+				}
+				// Non-alphanumeric
+				else {
+					s.op = &nulop;
+					s.ops.push(s.op);
+					err = 0;
+				}
 				break;
 			// Performop, but don't push nulop
 			case ')':
@@ -230,7 +267,7 @@ int ecalc(const char* str, double& res) {
 		return elex_err_none;
 	}
 
-	res = s.vals.top();
+	res = s.vals.top().val;
 
 	return elex_err_none;
 }

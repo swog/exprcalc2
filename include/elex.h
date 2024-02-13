@@ -16,6 +16,8 @@ enum elex_err : int {
 	elex_err_operator,
 	// Misc tokenizer error
 	elex_err_tokenizer,
+	// Used unknown global.
+	elex_err_global,
 };
 
 typedef struct {
@@ -23,4 +25,4 @@ typedef struct {
 	elex_evalfn fn;
 } elex_op;
 
-int ecalc(const char* str, double& res);
+int ecalc(const char* str, double& res, const std::unordered_map<std::string, double>& globals);

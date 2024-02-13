@@ -1,4 +1,8 @@
-#include <stdio.h>
+#include <cstdio>
+#include <unordered_map>
+#include <string>
+#define _USE_MATH_DEFINES
+#include <cmath>
 #include "elex.h"
 
 int main(int argc, char** argv) {
@@ -8,10 +12,14 @@ int main(int argc, char** argv) {
 	}
 
 	double val;
-	int r = ecalc(argv[1], val);	
+	std::unordered_map<std::string, double> globals;
+	globals["e"] = M_E;
+	globals["pi"] = M_PI;
+
+	int r = ecalc(argv[1], val, globals);	
 
 	if (r != 0) {
-		printf("err: %i\n", r);
+		fprintf(stderr, "err: %i\n", r);
 		return 1;
 	}
 
