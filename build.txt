@@ -1,0 +1,7 @@
+mkdir -p bin && \
+g++  -c -I./include  src/elex.cpp -o bin/elex.o
+mkdir -p bin && \
+g++  -c -I./include  src/etok.cpp -o bin/etok.o
+mkdir -p bin && \
+g++  -c -I./include  src/main.cpp -o bin/main.o
+g++   bin/elex.o  bin/etok.o  bin/main.o -o exprcalc

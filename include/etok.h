@@ -9,9 +9,12 @@ enum etok_err : int {
 };
 
 enum etok_type : int {
-	etok_type_null,
-	etok_type_punct,
-	etok_type_alnum
+	etok_type_null 	= 0,
+	etok_type_punct = 1,
+	etok_type_alpha = 2,
+	etok_type_num 	= 4,
+	// Not an actual type, flags
+	etok_type_alnum = 6, 
 };
 
 /*

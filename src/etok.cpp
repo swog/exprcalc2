@@ -1,5 +1,6 @@
 #include <ctype.h>
 #include <stdlib.h>
+#include <cstdio>
 #include "etok.h"
 
 /*
@@ -64,7 +65,13 @@ int etok(	const char* str, size_t size, size_t& pos,
 	}
 
 	tok[len++] = '\0';
-	type = etok_type_alnum;
+
+	if (isalpha(tok[0])) {
+		type = etok_type_alpha;
+	}
+	else {
+		type = etok_type_num;
+	}
 
 	return etok_err_none;
 }

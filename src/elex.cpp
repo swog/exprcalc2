@@ -4,8 +4,8 @@
 #include <unordered_map>
 #include <iostream>
 #include <cstring>
-#include "elex.h"
 #include "etok.h"
+#include "elex.h"
 
 // Src: etok.h
 int etok(	const char* str, size_t size, size_t& pos, 
@@ -18,11 +18,6 @@ int etok(	const char* str, size_t size, size_t& pos,
 #else
 #define DbgPrintf
 #endif
-
-#define PREC_ADD 1
-#define PREC_SUB 1
-#define PREC_MUL 2
-#define PREC_DIV 2
 
 static elex_op nulop = {0, NULL};
 
@@ -54,12 +49,6 @@ static double evaldiv(double left, double right) {
 
 static elex_op divop = {PREC_DIV, evaldiv};
 
-// Literal
-typedef struct {
-	std::string tok;
-	double val;
-	bool alpha : 1;
-} elex_lit;
 
 // Close a frame (parenthetical expression)
 static int performop(
@@ -92,7 +81,7 @@ static int performop(
 			double left = vals.top().val;
 			vals.pop();
 
-			vals.push({"", fn(left, right), false});
+			vals.push({"", fn(left, right), etok_type_num});
 			ops.pop();
 		}
 	}
@@ -104,44 +93,25 @@ static int performop(
 	return elex_err_none;
 }
 
-// ecalc variable declaration warranted a state
-typedef struct {
-	// Position in the string input
-	size_t pos;
-	// Token precedence
-	const elex_op* op;
-	// Token
-	char tok[32];
-	// Current type
-	etok_type type;
-	// Previous type
-	etok_type ptype;
-	// Coefficient of the current alphanumeric token gathered from negatives
-	double coeff;
-	// Operator stack
-	// NULL pointers are open parenthesis.
-	std::stack<const elex_op*> ops;
-	// Value stack
-	std::stack<elex_lit> vals;
-} ecalc_state;
-
-int ecalc(const char* str, double& res, const std::unordered_map<std::string, double>& globals) {
-	size_t 	size;
+int ecalc_ex(
+	const std::string& str, size_t& pos, double& res, 
+	const std::unordered_map<std::string, double>& globals,
+	const std::unordered_map<std::string, elex_fn>& funcs,
+	unsigned char fdepth
+) {
+	const size_t& 	size = str.size();
 	int	err;
 	
 	ecalc_state s;
-	s.pos = 0;
 	s.ptype = etok_type_null;
 	s.coeff = 1.0;
 	s.op = &nulop;
-
-	//res = 0.0;
-	size = strlen(str)+1;
+	s.pdepth = 0;
 
 	size_t i;
 
-	for (i = 0; i < 256; i++) {
-		err = etok(str, size, s.pos, s.tok, sizeof(s.tok), s.type);
+	for (i = 0; i < ELEX_MAXTOKENS; i++) {
+		err = etok(str.c_str(), size, pos, s.tok, sizeof(s.tok), s.type);
 
 		// Tokenizer error
 		if (err != etok_err_none) {
@@ -154,33 +124,33 @@ int ecalc(const char* str, double& res, const std::unordered_map<std::string, do
 		}
 		
 		// Push alphanumeric
-		if (s.type == etok_type_alnum) {
-			double val;
-			bool alpha = false;			
+		if (s.type == etok_type_alpha) {
+			const auto gmap = globals.find(s.tok);
 
-			if (isalpha(s.tok[0])) {
-				const auto map = globals.find(s.tok);
+			// Functions?
+			if (gmap == globals.cend()) {
+				const auto fmap = funcs.find(s.tok);				
 
-				// Functions?
-				if (map == globals.cend()) {
-					//return elex_err_global;
-					val = 0.0;
+				if (fmap == funcs.cend()) {
+					return elex_err_global;
 				}
-				else {
-					val = map->second;
-				}
-
-				alpha = true;
-			}
+	
+				// Handle it at `(`	
+				// Store the function so we don't have to search again.
+				s.vals.push({s.tok, s.coeff, etok_type_alpha, fmap->second});
+			}	
 			else {
-				val = atof(s.tok);
+				s.vals.push({s.tok, s.coeff*gmap->second, etok_type_num});
 			}
 
+			s.coeff = 1.0;
+		}
+		else if (s.type == etok_type_num) {
 			// This works for negatives, reset coefficient
-			s.vals.push({s.tok, s.coeff*val, alpha});
+			s.vals.push({s.tok, s.coeff*atof(s.tok), etok_type_num});
 			// Punctuation parsing will keep track of the actual negative value.
 			// However, only use it once.
-			s.coeff = 1.0;
+			s.coeff = 1.0;	
 		}
 		// Punctuation; operators
 		else if (s.type == etok_type_punct) {
@@ -191,22 +161,97 @@ int ecalc(const char* str, double& res, const std::unordered_map<std::string, do
 			case '(':
 				// Alphanumeric previous value means function call.
 				// Recursive call to ecalc
-				if (s.ptype == etok_type_alnum && !s.vals.empty() && s.vals.top().alpha) {
-					// Handle functions here	
+				if (s.ptype == etok_type_alpha) {
+					// This shouldn't ever happen
+					// Every alphanumeric is added to the stack.
+					//   The only way this could happen is the global was not found, 
+					// and it somehow didn't error
+					if (s.vals.empty()) {
+						return elex_err_unreachable;
+					}
+
+					// Custom function is a NULL pointer
+					if (!s.vals.top().fn) {
+						return elex_err_nullfn;
+					}
+
+					std::vector<elex_lit> args;
+					elex_lit arg;
+	
+					// Maximum arguments
+					size_t j;
+
+					for (j = 0; j < ELEX_MAXARGS; j++) {
+						err = ecalc_ex(str, pos, arg.val, globals, funcs, fdepth+1);
+
+						if (err != elex_err_unopened) {
+							return err;
+						}
+						
+						args.push_back(arg);
+
+						if (err == elex_err_unopened) {
+							break;
+						}
+					}
+
+					if (j > ELEX_MAXARGS) {
+						return elex_err_maxargs;
+					}
+
+					double coeff = s.vals.top().val;
+					err = s.vals.top().fn(s.vals.top(), args);	
+					s.vals.top().val *= coeff;
+
+					if (err) {
+						return err;
+					}
 				}
 				// Non-alphanumeric
 				else {
+					s.pdepth++;
 					s.op = &nulop;
 					s.ops.push(s.op);
 					err = 0;
 				}
+
 				break;
-			// Performop, but don't push nulop
+			case ',':
+				//   Depth either went negative somehow, or we're not in fd>0 
+				// therefore we're not in a function..
+				if (fdepth <= 0) {
+					// The only general syntax error!
+					//   I decided I don't want to call it err_syntax because
+					// a syntax error could also be an unclosed function call.
+					return elex_err_comma;
+				}
+	
+				// Exit out	
+				goto function_out;
 			case ')':
 				s.op = &nulop;
 				err = performop(s.op, s.vals, s.ops, false);
+
+				if (err) {
+					return err;
+				}
+
+				// Exit out
+				// The depth is 0 so not in an expression.
+				// We're in a function call	
+				if (s.pdepth <= 0) {
+					if (s.vals.empty()) {
+						return elex_err_expectedarg;
+					}					
+
+					res = s.vals.top().val;
+					
+					return elex_err_unopened;	
+				}
+		
+				s.pdepth--;
+				
 				break;
-			// Performop only if it's not a negative unary
 			case '-':
 				// Negatives
 				// Multiply coefficient by -1 to keep track of multiple
@@ -249,12 +294,12 @@ int ecalc(const char* str, double& res, const std::unordered_map<std::string, do
 		s.ptype = s.type;
 	}
 
-	// >= 256 tokens, fishy usage
-	if (i == 256) {
+	// > 256 tokens, fishy usage
+	if (i > ELEX_MAXTOKENS) {
 		return elex_err_big;
 	}
 
-	// Pop the rest of the arguments
+	// pop the rest of the arguments
 	err = performop(&nulop, s.vals, s.ops, false);
 
 	if (err) {
@@ -271,3 +316,16 @@ int ecalc(const char* str, double& res, const std::unordered_map<std::string, do
 
 	return elex_err_none;
 }
+
+int ecalc(
+	const std::string& str, double& res, 
+	const std::unordered_map<std::string, double>& globals,
+	const std::unordered_map<std::string, elex_fn>& funcs,
+	unsigned int fdepth	// Function depth	
+) {
+	size_t pos = 0;
+	
+	return ecalc_ex(str, pos, res, globals, funcs, fdepth);
+}
+
+
