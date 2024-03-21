@@ -4,6 +4,7 @@
 #include <unordered_map>
 #include <iostream>
 #include <cstring>
+#include <memory>
 #include "etok.h"
 #include "elex.h"
 
@@ -19,313 +20,380 @@ int etok(	const char* str, size_t size, size_t& pos,
 #define DbgPrintf
 #endif
 
-static elex_op nulop = {0, NULL};
+#define PREC_PAREN 0
+#define PREC_CONST 1
+#define PREC_ADD 2
+#define PREC_SUB 2
+#define PREC_MUL 3
+#define PREC_DIV 3
 
-static double evaladd(double left, double right) {
-	DbgPrintf("%f+%f\n", left, right);
-	return left+right;
+#define MAXARGS 32
+
+static elex_token literal(ecalc_state& s, double val, elex_fn fn = NULL) {
+	elex_token t;
+	t.tok = s.tok;
+	t.val = s.coeff*val;
+	t.prec = PREC_CONST;
+	t.type = s.type;
+	t.fn = fn;
+	return t;
 }
 
-static elex_op addop = {PREC_ADD, evaladd};
-
-static double evalsub(double left, double right) {
-	DbgPrintf("%f-%f\n", left, right);
-	return left-right;
+static elex_token literal(double val) {
+	elex_token t;
+	t.val = val;
+	t.prec = PREC_CONST;
+	t.type = etok_type_num;
+	t.fn = NULL;
+	return t;
 }
 
-static elex_op subop = {PREC_SUB, evalsub};
-
-static double evalmul(double left, double right) {
-	DbgPrintf("%f*%f\n", left, right);
-	return left*right;
+static elex_token operation(ecalc_state& s, int prec, elex_fn fn) {
+	elex_token t;
+	t.tok = s.tok;
+	t.val = 0.0;
+	t.prec = prec;
+	t.type = s.type;
+	t.fn = fn;
+	return t;
 }
 
-static elex_op mulop = {PREC_MUL, evalmul};
-
-static double evaldiv(double left, double right) {
-	DbgPrintf("%f/%f\n", left, right);
-	return left/right;
+static elex_token operation(const char* tok, int prec, etok_type type, elex_fn fn) {
+	elex_token t;
+	t.tok = tok;
+	t.val = 0.0;
+	t.prec = prec;
+	t.type = type;
+	t.fn = fn;
+	return t;
 }
 
-static elex_op divop = {PREC_DIV, evaldiv};
+#define ECALC_OP(NAME, OP) \
+static int ecalc_##NAME(elex_token& res, const std::vector<elex_token>& args) { \
+	if (args.size() < 2) return elex_err_operand; \
+	res = literal(args[0].val OP args[1].val); \
+	return 0; \
+}
+
+ECALC_OP(add, +);
+ECALC_OP(sub, -);
+ECALC_OP(mul, *);
+ECALC_OP(div, /);
 
 
-// Close a frame (parenthetical expression)
-static int performop(
-	const elex_op* 			op,
-	std::stack<elex_lit>& 		vals,
-	std::stack<const elex_op*>& 	ops,
-	bool		 		push
-) {
-	// Perform operations
-	while (!ops.empty() && ops.top()->prec >= op->prec) {
-		// Until '(', a NULL function
-		if (ops.top()->fn == NULL) {
-			// Only pop frame `(` until `)`
-			if (op == &nulop) {
-				ops.pop();
-			}
-
-			break;
-		}
-		// There is not enough things to pop off the stack.
-		else if (vals.size() < 2) {
-			return elex_err_operand;
+//
+// 	Perform alphanumeric token
+//
+// Push each number to the `vals` stack.
+// 
+// If it's alphabetical then
+//  
+//  If it's a global then
+//    Push global
+//  
+//  Else if it's a function then
+//    Push function
+//  
+//  Else then
+//    Error
+//
+//   Reset coefficient such that negations only
+// affect one literal.
+//
+static int do_alnum(ecalc_state& s) {
+	if (s.type == etok_type_num) {
+		//s.postfix.push_back({s.tok, s.coeff*atof(s.tok), 0, s.type, NULL});
+		s.vals.push(literal(s, atof(s.tok)));
+	}
+	else if (s.type == etok_type_alpha) {
+		auto gmap = s.globals->find(s.tok);
+		if (gmap != s.globals->cend()) {
+			//s.postfix.push_back({s.tok, s.coeff*gmap->second, 0, s.type, NULL});
+			s.vals.push(literal(s, gmap->second));
 		}
 		else {
-			elex_evalfn fn = ops.top()->fn;
+			auto fmap = s.funcs->find(s.tok);
+			if (fmap != s.funcs->cend()) {
+				//s.postfix.push_back({s.tok, s.coeff, 0, s.type, fmap->second});
+				s.vals.push(literal(s, 1.0, fmap->second));
+			}
+			else {
+				return elex_err_global;
+			}
+		}	
+	}
+	
+	s.coeff = 1.0;
 
-			double right = vals.top().val;
-			vals.pop();
+	return 0;
+}
 
-			double left = vals.top().val;
-			vals.pop();
+//	Perform preceding operations, then push operator
+// 
+// For each operation in stack:
+//   
+//   If operation is an open parenthesis then
+//     If the new operation is a close parenthesis then
+//       Pop the open parenthesis
+//     Else
+//       Stop
+//
+//   Else
+//
+//     Pop left and right from the stack
+//     Perform operation
+//     Push result
+//     Pop operation
+//
+//   Push new operation
+// 
+static int push_op(ecalc_state& s, int prec, elex_fn fn) {
+	while (!s.ops.empty() && s.ops.top().prec >= prec) {
+		if (s.ops.top().prec == PREC_PAREN) {
+			// Remove `(` and don't add `)`
+			if (prec == PREC_PAREN) {
+				s.ops.pop();
+				return 0;
+			}
+			else {
+				// Push onto stack
+				break;
+			}
+		}
+		
+		//s.postfix.push_back(s.ops.top());
 
-			vals.push({"", fn(left, right), etok_type_num});
-			ops.pop();
+		elex_token right = s.vals.top();
+		s.vals.pop();		
+
+		elex_token left = s.vals.top();
+		s.vals.pop();
+
+		elex_token res;
+
+		int err = s.ops.top().fn(res, {left, right});
+
+		if (err) {
+			return err;
+		}
+
+		s.vals.push(res);
+		s.ops.pop();
+	}
+
+	s.ops.push(operation(s, prec, fn));
+
+	return 0;
+}
+
+static int do_punct(ecalc_state& s) {
+	int err = 0;
+
+	switch (s.tok[0]) {
+	case '+':
+		err = push_op(s, PREC_ADD, ecalc_add); 
+		break;
+	case '-':
+		if (!(s.ptype & etok_type_alnum)) {
+			s.coeff *= -1.0;
+		}
+		else {
+			err = push_op(s, PREC_SUB, ecalc_sub);
+		}
+		break;
+	case '*':
+		err = push_op(s, PREC_MUL, ecalc_mul);
+		break;
+	case '/':
+		err = push_op(s, PREC_DIV, ecalc_div);
+		break;
+	case '(':
+		if (s.ptype & etok_type_alnum) {
+			err = push_op(s, PREC_MUL, ecalc_mul);
+		}
+
+		s.pdepth++;
+		s.ops.push(operation(s, PREC_PAREN, NULL));
+		break;
+	case ')':
+		printf(") %d\n", s.pdepth);	
+		if (s.pdepth <= 0) {
+			return elex_err_unopened;
+		}
+
+		s.pdepth--;	
+		err = push_op(s, PREC_PAREN, NULL);	
+		break;
+	// Function call break
+	case ',':
+		return elex_err_comma;
+	default:
+		return elex_err_unknown;
+	}
+	
+	return err;
+}
+
+static int do_punct(ecalc_state& s, const char* punct) {
+	strcpy(s.tok, punct);
+	return do_punct(s);
+}
+
+static inline bool is_functioncall(ecalc_state& s) {
+	return s.tok[0] == '(' && s.ptype == etok_type_alpha && s.vals.top().fn != NULL;
+}
+
+static ecalc_state copy_state(ecalc_state& s) {
+	ecalc_state c;
+
+	c.globals = s.globals;
+	c.funcs = s.funcs;
+	c.type = c.ptype = etok_type_null;
+	c.coeff = 1.0;
+	c.tok[0] = 0;
+	c.pdepth = 0;
+
+	return c;
+}
+
+static int do_functioncall(const std::string& str, size_t size, 
+	size_t& pos, ecalc_state& s) {
+
+	// Copy state
+	ecalc_state new_s = copy_state(s);
+	elex_token tmp = literal(0.0);
+	std::vector<elex_token> args;
+
+	int err = 0;
+	size_t i;
+
+	for (i = 0; i < MAXARGS && !err; i++) {
+		err = ecalc_ex(str, pos, tmp, new_s);
+		args.push_back(tmp);
+
+		// End of function call `)`
+		if (err == elex_err_unopened) {
+			err = 0;
+			break;
+		}
+		else if (err == elex_err_comma) {
+			err = 0;
 		}
 	}
 
-	if (push) {
-		ops.push(op);
+	if (i >= MAXARGS) {
+		return elex_err_maxargs;	
 	}
 
-	return elex_err_none;
+	// ecalc_ex won't get a EOS error; any error is bad
+	if (err) {
+		return err;
+	}
+
+	// Get the function token
+	elex_token func = s.vals.top();
+	s.vals.pop();
+
+	// Call the function
+	elex_token r;
+	err = func.fn(r, args);
+
+	// Push the return value
+	s.vals.push(r);
+
+	return err;
 }
 
 int ecalc_ex(
-	const std::string& str, size_t& pos, double& res, 
-	const std::unordered_map<std::string, double>& globals,
-	const std::unordered_map<std::string, elex_fn>& funcs,
-	unsigned char fdepth
+	const std::string& str, size_t& pos, 
+	elex_token& res, ecalc_state& s
 ) {
-	const size_t& 	size = str.size();
-	int	err;
-	
-	ecalc_state s;
-	s.ptype = etok_type_null;
-	s.coeff = 1.0;
-	s.op = &nulop;
-	s.pdepth = 0;
+	const size_t& size = str.size();
+	int err;
 
 	size_t i;
 
+	do_punct(s, "(");
+
 	for (i = 0; i < ELEX_MAXTOKENS; i++) {
 		err = etok(str.c_str(), size, pos, s.tok, sizeof(s.tok), s.type);
+	
+		if (err == etok_err_eos) {
+			err = 0;
+			break;
+		}
 
-		// Tokenizer error
-		if (err != etok_err_none) {
-			// EOS `errors` are ignored
-			if (err != etok_err_eos) {
-				return elex_err_tokenizer;
+		// Alphanumerics
+		if (s.type & etok_type_alnum) {
+			err = do_alnum(s);	
+		}
+		else if (s.type == etok_type_punct) {
+			// Function call
+			if (is_functioncall(s)) {
+				err = do_functioncall(str, size, pos, s);
 			}
+			else {
+				err = do_punct(s);
+			}
+		}
 
+		if (err) {
 			break;
 		}
 		
-		// Push alphanumeric
-		if (s.type == etok_type_alpha) {
-			const auto gmap = globals.find(s.tok);
-
-			// Functions?
-			if (gmap == globals.cend()) {
-				const auto fmap = funcs.find(s.tok);				
-
-				if (fmap == funcs.cend()) {
-					return elex_err_global;
-				}
-	
-				// Handle it at `(`	
-				// Store the function so we don't have to search again.
-				s.vals.push({s.tok, s.coeff, etok_type_alpha, fmap->second});
-			}	
-			else {
-				s.vals.push({s.tok, s.coeff*gmap->second, etok_type_num});
-			}
-
-			s.coeff = 1.0;
-		}
-		else if (s.type == etok_type_num) {
-			// This works for negatives, reset coefficient
-			s.vals.push({s.tok, s.coeff*atof(s.tok), etok_type_num});
-			// Punctuation parsing will keep track of the actual negative value.
-			// However, only use it once.
-			s.coeff = 1.0;	
-		}
-		// Punctuation; operators
-		else if (s.type == etok_type_punct) {
-			// The tokenizer spits out 1 character long punctuation tokens
-			switch (s.tok[0]) {	
-			// Don't pop from the ops stack, only push `(`
-			// This marks the end of the frame in the stack.
-			case '(':
-				// Alphanumeric previous value means function call.
-				// Recursive call to ecalc
-				if (s.ptype == etok_type_alpha) {
-					// This shouldn't ever happen
-					// Every alphanumeric is added to the stack.
-					//   The only way this could happen is the global was not found, 
-					// and it somehow didn't error
-					if (s.vals.empty()) {
-						return elex_err_unreachable;
-					}
-
-					// Custom function is a NULL pointer
-					if (!s.vals.top().fn) {
-						return elex_err_nullfn;
-					}
-
-					std::vector<elex_lit> args;
-					elex_lit arg;
-	
-					// Maximum arguments
-					size_t j;
-
-					for (j = 0; j < ELEX_MAXARGS; j++) {
-						err = ecalc_ex(str, pos, arg.val, globals, funcs, fdepth+1);
-
-						if (err != elex_err_unopened) {
-							return err;
-						}
-						
-						args.push_back(arg);
-
-						if (err == elex_err_unopened) {
-							break;
-						}
-					}
-
-					if (j > ELEX_MAXARGS) {
-						return elex_err_maxargs;
-					}
-
-					double coeff = s.vals.top().val;
-					err = s.vals.top().fn(s.vals.top(), args);	
-					s.vals.top().val *= coeff;
-
-					if (err) {
-						return err;
-					}
-				}
-				// Non-alphanumeric
-				else {
-					s.pdepth++;
-					s.op = &nulop;
-					s.ops.push(s.op);
-					err = 0;
-				}
-
-				break;
-			case ',':
-				//   Depth either went negative somehow, or we're not in fd>0 
-				// therefore we're not in a function..
-				if (fdepth <= 0) {
-					// The only general syntax error!
-					//   I decided I don't want to call it err_syntax because
-					// a syntax error could also be an unclosed function call.
-					return elex_err_comma;
-				}
-	
-				// Exit out	
-				goto function_out;
-			case ')':
-				s.op = &nulop;
-				err = performop(s.op, s.vals, s.ops, false);
-
-				if (err) {
-					return err;
-				}
-
-				// Exit out
-				// The depth is 0 so not in an expression.
-				// We're in a function call	
-				if (s.pdepth <= 0) {
-					if (s.vals.empty()) {
-						return elex_err_expectedarg;
-					}					
-
-					res = s.vals.top().val;
-					
-					return elex_err_unopened;	
-				}
-		
-				s.pdepth--;
-				
-				break;
-			case '-':
-				// Negatives
-				// Multiply coefficient by -1 to keep track of multiple
-				// -negatives.
-				if (s.ptype != etok_type_alnum) {
-					s.coeff *= -1.0;
-					err = 0;
-					break;
-				}
-				
-				s.op = &subop;
-				err = performop(s.op, s.vals, s.ops, true);
-				break;	
-			//   These are simple performops that perform everything
-			// with >= precedence with the operation. Then push the
-			// current operation.
-			case '+':
-				s.op = &addop;
-				err = performop(s.op, s.vals, s.ops, true);
-				break;
-			case '*':
-				s.op = &mulop;
-				err = performop(s.op, s.vals, s.ops, true);
-				break;
-			case '/':
-				s.op = &divop;
-				err = performop(s.op, s.vals, s.ops, true);
-				break;	
-			// Unknown operation
-			default:
-				return elex_err_operator;
-			}
-
-			if (err != 0) {
-				return err;
-			}
-		}
-
 		// Only used for negation
 		s.ptype = s.type;
 	}
 
 	// > 256 tokens, fishy usage
-	if (i > ELEX_MAXTOKENS) {
+	if (i >= ELEX_MAXTOKENS) {
 		return elex_err_big;
 	}
 
-	// pop the rest of the arguments
-	err = performop(&nulop, s.vals, s.ops, false);
+	printf("yes\n");
+	do_punct(s, ")");
+
+	// No operands
+	if (s.vals.empty()) {
+		return elex_err_operand;
+	}
+
+	res = s.vals.top();
+
+	// Unclosed parenthesis
+	if (s.pdepth > 0) {
+		return elex_err_unclosed;
+	}
+
+	return err;
+}
+
+int ecalc(
+	const std::string& str, double& res, 
+	std::unordered_map<std::string, double>& globals,
+	std::unordered_map<std::string, elex_fn>& funcs
+) {
+	size_t pos = 0;
+	ecalc_state s;
+
+	s.globals = &globals;
+	s.funcs = &funcs;
+	s.type = s.ptype = etok_type_null;
+	s.coeff = 1.0;
+	s.tok[0] = 0;
+	s.pdepth = 0;
+
+	elex_token res_token;
+
+	int err = ecalc_ex(str, pos, res_token, s);
 
 	if (err) {
 		return err;
 	}
 
-	// No values; not an error just 0
-	if (s.vals.empty()) {
-		res = 0.0;
-		return elex_err_none;
-	}
-
-	res = s.vals.top().val;
-
-	return elex_err_none;
-}
-
-int ecalc(
-	const std::string& str, double& res, 
-	const std::unordered_map<std::string, double>& globals,
-	const std::unordered_map<std::string, elex_fn>& funcs,
-	unsigned int fdepth	// Function depth	
-) {
-	size_t pos = 0;
+	res = res_token.val;
 	
-	return ecalc_ex(str, pos, res, globals, funcs, fdepth);
+	return 0;
 }
 
 

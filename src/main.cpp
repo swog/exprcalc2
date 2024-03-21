@@ -8,7 +8,7 @@
 #include "etok.h"
 #include "elex.h"
 
-static int eval_sin(elex_lit& res, std::vector<elex_lit>& args) {
+static int eval_sin(elex_token& res, const std::vector<elex_token>& args) {
 	if (args.empty()) {
 		return elex_err_missingarg;
 	}
